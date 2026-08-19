@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toki Novel Downloader GUI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-card: rgba(23, 29, 45, 0.75);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-primary: #6366f1;
+            --accent-secondary: #a855f7;
+            --accent-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at top right, #1e1b4b 0%, #0b0f19 50%, #05070e 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 24px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 680px;
+            background: var(--bg-card);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            box-shadow: 0 32px 64px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 헤더 */
+        .app-header {
+            padding: 24px 28px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .app-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-icon {
+            font-size: 28px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .app-title {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            background: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        /* 본문 */
+        .app-body {
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: border-color 0.2s;
+        }
+
+        .card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .card-label {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* 인풋 & 버튼 */
+        .input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-text {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .input-text:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(168, 85, 247, 0.45);
+        }
+
+        .btn-primary:disabled {
+            background: #334155;
+            color: #64748b;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.18);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #fca5a5;
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* 소설 정보 카드 */
+        #novel-info-box {
+            display: none;
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 16px;
+            padding: 18px 20px;
+            flex-direction: column;
+            gap: 8px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .novel-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .novel-meta-tags {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: #cbd5e1;
+            flex-wrap: wrap;
+        }
+
+        .tag-pill {
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .tag-complete {
+            background: #059669;
+            color: #fff;
+        }
+
+        .tag-ongoing {
+            background: #4f46e5;
+            color: #fff;
+        }
+
+        /* 라디오 옵션 */
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .radio-item input[type="radio"] {
+            accent-color: var(--accent-secondary);
+            cursor: pointer;
+        }
+
+        .range-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 24px;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+
+        .input-number {
+            width: 80px;
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            color: #fff;
+            text-align: center;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .input-number:focus {
+            border-color: var(--accent-primary);
+        }
+
+        /* 프로그레스 바 */
+        .progress-card {
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 16px;
+            padding: 18px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 12px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-task {
+            font-size: 13px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* 로그 창 */
+        .log-box {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-family: 'JetBrains Mono', Consolas, monospace;
+            font-size: 12px;
+            color: #cbd5e1;
+            height: 120px;
+            overflow-y: auto;
+            line-height: 1.5;
+        }
+
+        .log-line {
+            margin-bottom: 3px;
+            word-break: break-all;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .action-row .btn {
+            flex: 1;
+            padding: 14px;
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- 헤더 -->
+    <div class="app-header">
+        <div class="app-title-group">
+            <span class="app-icon">📚</span>
+            <div class="app-title">Toki Novel Downloader GUI</div>
+        </div>
+        <div class="status-badge">
+            <span class="status-dot"></span>
+            <span>시스템 준비됨</span>
+        </div>
+    </div>
+
+    <!-- 본문 -->
+    <div class="app-body">
+        <!-- 1. URL 입력 -->
+        <div class="card">
+            <div class="card-label">🔗 소설 목록 화면 URL</div>
+            <div class="input-group">
+                <input type="text" id="input-url" class="input-text" placeholder="예: https://newtoki1.org/novel/63587" value="https://newtoki1.org/novel/63587">
+                <button id="btn-inspect" class="btn btn-secondary">🔍 소설 정보 조회</button>
+            </div>
+        </div>
+
+        <!-- 2. 감지된 소설 정보 (자동 표시) -->
+        <div id="novel-info-box">
+            <div class="novel-title" id="ui-novel-title">소설 제목 로딩 중...</div>
+            <div class="novel-meta-tags">
+                <span id="ui-novel-author">✍️ 작가: -</span>
+                <span>•</span>
+                <span id="ui-novel-genre">🏷️ 장르: -</span>
+                <span>•</span>
+                <span id="ui-novel-count">총 0화</span>
+                <span id="ui-novel-status" class="tag-pill tag-ongoing">연재중</span>
+            </div>
+        </div>
+
+        <!-- 3. 다운로드 옵션 -->
+        <div class="card">
+            <div class="card-label">⚙️ 다운로드 범위 및 저장 설정</div>
+            <div class="radio-group">
+                <label class="radio-item">
+                    <input type="radio" name="range-type" value="all" checked>
+                    <span>전체 다운로드 (<span id="ui-all-label">1화 ~ 끝까지</span>)</span>
+                </label>
+                <label class="radio-item">
+                    <input type="radio" name="range-type" value="custom">
+                    <span>일부 범위 지정</span>
+                </label>
+                <div class="range-box" id="range-inputs-box">
+                    <input type="number" id="input-start" class="input-number" value="1" min="1" disabled>
+                    <span>화 ~</span>
+                    <input type="number" id="input-last" class="input-number" value="10" min="1" disabled>
+                    <span>화</span>
+                </div>
+            </div>
+            <div style="margin-top: 10px;">
+                <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px;">📁 저장 위치:</div>
+                <input type="text" id="input-output" class="input-text" value="./북토끼" style="padding: 8px 12px; font-size: 13px;">
+            </div>
+        </div>
+
+        <!-- 4. 실시간 진행바 -->
+        <div class="progress-card">
+            <div class="progress-header">
+                <span id="ui-progress-text">진행 상태: 대기 중</span>
+                <span id="ui-percent" style="color: #a855f7;">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div id="ui-progress-fill" class="progress-bar-fill"></div>
+            </div>
+            <div class="progress-task" id="ui-current-task">준비 완료. 시작 버튼을 눌러주세요.</div>
+        </div>
+
+        <!-- 5. 실시간 로그 콘솔 -->
+        <div class="card" style="padding: 12px 14px;">
+            <div class="card-label" style="font-size: 11px; margin-bottom: 6px;">🖥️ 실시간 로그</div>
+            <div class="log-box" id="log-box">
+                <div class="log-line">[시스템] GUI 준비 완료. 소설 URL을 입력하고 다운로드를 시작하세요.</div>
+            </div>
+        </div>
+
+        <!-- 6. 액션 버튼 -->
+        <div class="action-row">
+            <button id="btn-start" class="btn btn-primary">▶ 다운로드 시작</button>
+            <button id="btn-stop" class="btn btn-danger" style="display: none;">⏹ 다운로드 중단</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let detectedMeta = null;
+    const logBox = document.getElementById('log-box');
+
+    function appendLog(msg) {
+        const line = document.createElement('div');
+        line.className = 'log-line';
+        line.textContent = msg;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    // SSE 이벤트 수신
+    const eventSource = new EventSource('/api/events');
+    eventSource.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.type === 'log') {
+            appendLog(data.message);
+        } else if (data.type === 'progress') {
+            document.getElementById('ui-progress-fill').style.width = `${data.percent}%`;
+            document.getElementById('ui-percent').innerText = `${data.percent}%`;
+            document.getElementById('ui-progress-text').innerText = `진행: ${data.current} / ${data.total}화 (${data.percent}%)`;
+            document.getElementById('ui-current-task').innerText = `⏳ [${data.chapterTitle}] 다운로드 중...`;
+        } else if (data.type === 'meta') {
+            applyMeta(data.meta);
+        } else if (data.type === 'completed') {
+            document.getElementById('ui-progress-fill').style.width = '100%';
+            document.getElementById('ui-percent').innerText = '100%';
+            document.getElementById('ui-progress-text').innerText = `완료: ${data.totalCount}개 회차`;
+            document.getElementById('ui-current-task').innerText = `🎉 통합 파일 저장 완료: ${data.fileName}`;
+            appendLog(`🎉 다운로드 완료: ${data.fileName}`);
+            setDownloadingState(false);
+        } else if (data.type === 'error') {
+            document.getElementById('ui-current-task').innerText = `❌ 오류: ${data.message}`;
+            setDownloadingState(false);
+        }
+    };
+
+    function applyMeta(meta) {
+        detectedMeta = meta;
+        document.getElementById('novel-info-box').style.display = 'flex';
+        document.getElementById('ui-novel-title').innerText = meta.title;
+        document.getElementById('ui-novel-author').innerText = `✍️ 작가: ${meta.author || '미상'}`;
+        document.getElementById('ui-novel-genre').innerText = `🏷️ 장르: ${meta.firstGenre || '일반'}`;
+        
+        const countText = meta.totalEpisodes ? `총 ${meta.totalEpisodes}화` : (meta.episodes ? `총 ${meta.episodes.length}화+` : '회차 감지');
+        document.getElementById('ui-novel-count').innerText = countText;
+
+        const statusEl = document.getElementById('ui-novel-status');
+        statusEl.innerText = meta.publishStatus || (meta.isCompleted ? '완결' : '연재중');
+        statusEl.className = `tag-pill ${meta.isCompleted ? 'tag-complete' : 'tag-ongoing'}`;
+
+        if (meta.episodes && meta.episodes.length > 0) {
+            const minNum = meta.episodes[0].num;
+            const maxNum = meta.episodes[meta.episodes.length - 1].num;
+            document.getElementById('ui-all-label').innerText = `${minNum}화 ~ ${maxNum}화`;
+            document.getElementById('input-start').value = minNum;
+            document.getElementById('input-last').value = maxNum;
+        }
+    }
+
+    // 소설 정보 조회
+    document.getElementById('btn-inspect').addEventListener('click', async () => {
+        const url = document.getElementById('input-url').value.trim();
+        if (!url) return alert('소설 URL을 입력해주세요.');
+
+        const btn = document.getElementById('btn-inspect');
+        btn.disabled = true;
+        btn.innerText = '🔍 조회 중...';
+        appendLog(`[조회] 소설 정보를 가져오는 중입니다: ${url}`);
+
+        try {
+            const resp = await fetch('/api/inspect', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            const result = await resp.json();
+            if (result.success) {
+                applyMeta(result.meta);
+                appendLog(`[조회 성공] ${result.meta.title} (${result.meta.publishStatus})`);
+            } else {
+                alert(`조회 실패: ${result.error}`);
+            }
+        } catch (e) {
+            alert(`네트워크 오류: ${e.message}`);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = '🔍 소설 정보 조회';
+        }
+    });
+
+    // 라디오 범위 전환
+    const radios = document.querySelectorAll('input[name="range-type"]');
+    const rangeBox = document.getElementById('range-inputs-box');
+    const startInp = document.getElementById('input-start');
+    const lastInp = document.getElementById('input-last');
+
+    radios.forEach(r => {
+        r.addEventListener('change', e => {
+            const isCustom = e.target.value === 'custom';
+            rangeBox.style.opacity = isCustom ? '1' : '0.5';
+            startInp.disabled = !isCustom;
+            lastInp.disabled = !isCustom;
+        });
+    });
+
+    function setDownloadingState(isDownloading) {
+        document.getElementById('btn-start').style.display = isDownloading ? 'none' : 'flex';
+        document.getElementById('btn-stop').style.display = isDownloading ? 'flex' : 'none';
+        document.getElementById('btn-inspect').disabled = isDownloading;
+        document.getElementById('input-url').disabled = isDownloading;
+    }
+
+    // 다운로드 시작
+    document.getElementById('btn-start').addEventListener('click', async () => {
+        const url = document.getElementById('input-url').value.trim();
+        if (!url) return alert('소설 URL을 입력해주세요.');
+
+        const rangeType = document.querySelector('input[name="range-type"]:checked').value;
+        const start = rangeType === 'custom' ? parseInt(startInp.value, 10) || 1 : 1;
+        const last = rangeType === 'custom' ? parseInt(lastInp.value, 10) || 99999 : 99999;
+        const outputDir = document.getElementById('input-output').value.trim();
+
+        setDownloadingState(true);
+        document.getElementById('ui-progress-fill').style.width = '0%';
+        document.getElementById('ui-percent').innerText = '0%';
+        document.getElementById('ui-progress-text').innerText = '진행 상태: 시작 중...';
+        document.getElementById('ui-current-task').innerText = '브라우저 초기화 및 소설 페이지 탐색 중...';
+
+        try {
+            const resp = await fetch('/api/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, start, last, outputDir })
+            });
+            const result = await resp.json();
+            if (!result.success) {
+                alert(`시작 실패: ${result.error}`);
+                setDownloadingState(false);
+            }
+        } catch (e) {
+            alert(`오류: ${e.message}`);
+            setDownloadingState(false);
+        }
+    });
+
+    // 다운로드 중단
+    document.getElementById('btn-stop').addEventListener('click', async () => {
+        if (confirm('다운로드를 중단하시겠습니까?')) {
+            await fetch('/api/stop', { method: 'POST' });
+            setDownloadingState(false);
+        }
+    });
+</script>
+</body>
+</html>

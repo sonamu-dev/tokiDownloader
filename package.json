@@ -1,5 +1,10 @@
 {
   "type": "module",
+  "scripts": {
+    "start": "node gui.js",
+    "gui": "node gui.js",
+    "cli": "node down.js"
+  },
   "dependencies": {
     "puppeteer-real-browser": "^1.4.2"
   }
