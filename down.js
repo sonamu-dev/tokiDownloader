@@ -229,18 +229,29 @@ async function main() {
                 const authorEl = document.querySelector('a[href*="author="]');
                 const author = authorEl ? authorEl.innerText.trim() : '';
 
-                // 장르 (1번째 장르)
+                // 장르 (1번째 장르) 및 발행상태(완결 여부)
                 let firstGenre = '';
+                let isCompleted = false;
+                let publishStatus = '';
+
                 const allTextElements = Array.from(document.querySelectorAll('td, div, tr, p, span'));
                 for (const el of allTextElements) {
                     const t = el.innerText || '';
-                    if (t.startsWith('장르') || t.includes('\n장르\n') || t.includes('장르\n') || t.includes('장르 :')) {
+                    if (!firstGenre && (t.startsWith('장르') || t.includes('\n장르\n') || t.includes('장르\n') || t.includes('장르 :'))) {
                         const match = t.match(/장르\s*[\n:]\s*([^\n]+)/);
                         if (match) {
                             const rawGenres = match[1].split(',');
                             if (rawGenres.length > 0 && rawGenres[0].trim()) {
                                 firstGenre = rawGenres[0].trim();
-                                break;
+                            }
+                        }
+                    }
+                    if (!publishStatus && (t.includes('발행구분') || t.includes('연재상태') || t.includes('상태'))) {
+                        const match = t.match(/(?:발행구분|연재상태|상태)\s*[\n:]\s*([^\n]+)/);
+                        if (match) {
+                            publishStatus = match[1].trim();
+                            if (publishStatus.includes('완결')) {
+                                isCompleted = true;
                             }
                         }
                     }
@@ -250,11 +261,20 @@ async function main() {
                     if (genreLink) firstGenre = genreLink.innerText.trim();
                 }
 
-                return { title, author, firstGenre };
+                if (!isCompleted) {
+                    const titleText = document.querySelector('.page-title')?.innerText || '';
+                    if (titleText.includes('완결') || document.querySelector('.badge')?.innerText.includes('완결')) {
+                        isCompleted = true;
+                    }
+                }
+
+                return { title, author, firstGenre, isCompleted, publishStatus: publishStatus || (isCompleted ? '완결' : '연재중') };
             });
             info.contentTitle = sanitizeFilename(metaInfo.title);
             info.author = sanitizeFilename(metaInfo.author);
             info.genre = sanitizeFilename(metaInfo.firstGenre);
+            info.isCompleted = metaInfo.isCompleted;
+            info.publishStatus = metaInfo.publishStatus;
 
             // 다음 페이지가 없다면 break
             if (await page.$('ul.pagination li[class="active"] ~ li:not([class="disabled"]) a')) {
@@ -373,7 +393,15 @@ async function main() {
             if (info.genre) parts.push(sanitizeFilename(info.genre));
             const baseFileName = parts.join('-');
 
-            const singleFileName = `${baseFileName} [${startNum}화~${lastNum}화].txt`;
+            const isAllDownload = (startNum === 1 && lastNum >= (info.rawTotalCount || collectedChapters.length));
+            let tag = '';
+            if (info.isCompleted && isAllDownload) {
+                tag = '[완결]';
+            } else {
+                tag = `[${startNum}화~${lastNum}화]`;
+            }
+
+            const singleFileName = `${baseFileName} ${tag}.txt`;
             saveBook(baseDir, singleFileName, fullBook);
             console.log(`🎉 통합 텍스트 파일 생성 완료: ${baseDir}/${singleFileName}`);
         }

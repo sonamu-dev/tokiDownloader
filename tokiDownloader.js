@@ -144,35 +144,56 @@
         const authorEl = doc.querySelector('a[href*="author="]');
         const author = authorEl ? authorEl.innerText.trim() : '';
 
-        // 장르 (1번째 장르)
+        // 장르 (1번째 장르) 및 발행상태(완결 여부)
         let firstGenre = '';
+        let isCompleted = false;
+        let publishStatus = '';
+
         const allTextElements = Array.from(doc.querySelectorAll('td, div, tr, p, span'));
         for (const el of allTextElements) {
             const t = el.innerText || '';
-            if (t.startsWith('장르') || t.includes('\n장르\n') || t.includes('장르\n') || t.includes('장르 :')) {
+            if (!firstGenre && (t.startsWith('장르') || t.includes('\n장르\n') || t.includes('장르\n') || t.includes('장르 :'))) {
                 const match = t.match(/장르\s*[\n:]\s*([^\n]+)/);
                 if (match) {
                     const rawGenres = match[1].split(',');
                     if (rawGenres.length > 0 && rawGenres[0].trim()) {
                         firstGenre = rawGenres[0].trim();
-                        break;
+                    }
+                }
+            }
+            if (!publishStatus && (t.includes('발행구분') || t.includes('연재상태') || t.includes('상태'))) {
+                const match = t.match(/(?:발행구분|연재상태|상태)\s*[\n:]\s*([^\n]+)/);
+                if (match) {
+                    publishStatus = match[1].trim();
+                    if (publishStatus.includes('완결')) {
+                        isCompleted = true;
                     }
                 }
             }
         }
+
         if (!firstGenre) {
             const genreLink = doc.querySelector('a[href*="genre="], a[href*="tag="]');
             if (genreLink) firstGenre = genreLink.innerText.trim();
         }
 
+        if (!isCompleted) {
+            const titleText = doc.querySelector('.page-title')?.innerText || '';
+            if (titleText.includes('완결') || doc.querySelector('.badge')?.innerText.includes('완결')) {
+                isCompleted = true;
+            }
+        }
+
         return {
             title,
             author,
-            firstGenre
+            firstGenre,
+            isCompleted,
+            publishStatus: publishStatus || (isCompleted ? '완결' : '연재중')
         };
     }
 
-    function formatNovelFileName(title, author, genre, rangeLabel) {
+    function formatNovelFileName(title, author, genre, rangeLabel, isCompleted = false, isAllDownload = false) {
         const safeTitle = sanitizeFilename(title);
         const safeAuthor = sanitizeFilename(author);
         const safeGenre = sanitizeFilename(genre);
@@ -182,8 +203,16 @@
         if (safeGenre) parts.push(safeGenre);
 
         const baseName = parts.join('-');
-        if (rangeLabel) {
-            return `${baseName} [${rangeLabel}].txt`;
+
+        let tag = '';
+        if (isCompleted && isAllDownload) {
+            tag = '[완결]';
+        } else if (rangeLabel) {
+            tag = `[${rangeLabel}]`;
+        }
+
+        if (tag) {
+            return `${baseName} ${tag}.txt`;
         }
         return `${baseName}.txt`;
     }
@@ -695,6 +724,8 @@
             this.seriesTitle = this.seriesInfo.title;
             this.author = this.seriesInfo.author;
             this.genre = this.seriesInfo.firstGenre;
+            this.isCompleted = this.seriesInfo.isCompleted;
+            this.publishStatus = this.seriesInfo.publishStatus;
             this.isDownloading = false;
             this.abortFlag = false;
             this.selectedDirectoryHandle = null;
@@ -733,9 +764,10 @@
                     <div class="toki-card">
                         <div class="toki-card-title">소설 정보</div>
                         <div class="toki-series-name" id="toki-ui-title" title="${escapeXml(this.seriesTitle)}">${escapeXml(this.seriesTitle)}</div>
-                        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px;">
-                            ${this.author ? `✍️ 작가: <b style="color:#e2e8f0;">${escapeXml(this.author)}</b>` : ''} 
-                            ${this.genre ? `&nbsp;|&nbsp; 🏷️ 장르: <b style="color:#e2e8f0;">${escapeXml(this.genre)}</b>` : ''}
+                        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            ${this.author ? `<span>✍️ 작가: <b style="color:#e2e8f0;">${escapeXml(this.author)}</b></span>` : ''} 
+                            ${this.genre ? `<span>🏷️ 장르: <b style="color:#e2e8f0;">${escapeXml(this.genre)}</b></span>` : ''}
+                            <span style="padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background: ${this.isCompleted ? '#059669' : '#4f46e5'}; color: #fff;">${this.publishStatus}</span>
                         </div>
                         <div class="toki-series-meta">
                             <span id="toki-ui-count">감지된 회차: 로딩 중...</span>
@@ -770,7 +802,7 @@
                         <div style="display: flex; flex-direction: column; gap: 10px;">
                             <div>
                                 <select class="toki-select" id="toki-select-format">
-                                    <option value="single-txt" selected>📄 통합 텍스트 파일 (.txt - 작가/장르 포함)</option>
+                                    <option value="single-txt" selected>📄 통합 텍스트 파일 (.txt - 작가/장르/완결 포함)</option>
                                     <option value="zip-txt">📦 회차별 텍스트 압축 (.zip)</option>
                                     <option value="epub">📖 표준 전자책 (.epub)</option>
                                 </select>
@@ -1043,7 +1075,7 @@
                 // =========================================================
                 if (collectedChapters.length > 0) {
                     const isAll = (rangeType === 'all' || (this.episodes.length > 0 && startNum === this.episodes[0].num && lastNum === this.episodes[this.episodes.length - 1].num));
-                    const rangeLabel = isAll ? '' : `${startNum}화~${lastNum}화`;
+                    const rangeLabel = `${startNum}화~${lastNum}화`;
 
                     // 1) 통합 텍스트 파일 (.txt)
                     if (format === 'single-txt') {
@@ -1054,7 +1086,7 @@
                             finalBody += `${c.content}\n\n\n`;
                         });
 
-                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel);
+                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel, this.isCompleted, isAll);
                         await this.saveFile(fileName, finalBody, 'text/plain;charset=utf-8');
                         this.log(`📄 통합 텍스트 저장 완료: ${fileName}`);
                     }
@@ -1069,14 +1101,14 @@
                         });
 
                         const zipBlob = await zip.generateAsync({ type: 'blob' });
-                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel).replace(/\.txt$/, '.zip');
+                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel, this.isCompleted, isAll).replace(/\.txt$/, '.zip');
                         await this.saveBlob(fileName, zipBlob);
                         this.log(`📦 회차별 압축 저장 완료: ${fileName}`);
                     }
                     // 3) 전자책 (.epub)
                     else if (format === 'epub') {
                         const epubBlob = await this.buildEpubBlob(this.seriesTitle, collectedChapters, startNum, lastNum);
-                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel).replace(/\.txt$/, '.epub');
+                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel, this.isCompleted, isAll).replace(/\.txt$/, '.epub');
                         await this.saveBlob(fileName, epubBlob);
                         this.log(`📖 EPUB 전자책 저장 완료: ${fileName}`);
                     }
