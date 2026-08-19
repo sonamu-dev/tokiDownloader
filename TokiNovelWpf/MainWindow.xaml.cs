@@ -156,6 +156,35 @@ namespace TokiNovelWpf
             BtnInspect.Content = "🔍 소설 정보 조회";
         }
 
+        [Flags]
+        private enum EXECUTION_STATE : uint
+        {
+            ES_AWAYMODE_REQUIRED = 0x00000040,
+            ES_CONTINUOUS = 0x80000000,
+            ES_SYSTEM_REQUIRED = 0x00000001
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+        private static extern EXECUTION_STATE SetThreadExecutionState(EXECUTION_STATE esFlags);
+
+        private void PreventSystemSleep()
+        {
+            try
+            {
+                SetThreadExecutionState(EXECUTION_STATE.ES_CONTINUOUS | EXECUTION_STATE.ES_SYSTEM_REQUIRED | EXECUTION_STATE.ES_AWAYMODE_REQUIRED);
+            }
+            catch { }
+        }
+
+        private void RestoreSystemSleep()
+        {
+            try
+            {
+                SetThreadExecutionState(EXECUTION_STATE.ES_CONTINUOUS);
+            }
+            catch { }
+        }
+
         private async void BtnStart_Click(object sender, RoutedEventArgs e)
         {
             string url = TxtUrl.Text.Trim();
@@ -166,6 +195,8 @@ namespace TokiNovelWpf
             }
 
             isDownloading = true;
+            PreventSystemSleep(); // 다운로드 중 시스템 절전 모드 방지 락 활성화
+
             BtnStart.Visibility = Visibility.Collapsed;
             BtnStop.Visibility = Visibility.Visible;
             BtnInspect.IsEnabled = false;
@@ -189,6 +220,7 @@ namespace TokiNovelWpf
 
             string outDir = TxtOutputDir.Text.Trim();
             AppendLog($"🚀 다운로드 시작: {url} ({start}화 ~ {(last == 99999 ? "끝" : last + "화")})");
+            AppendLog("💡 [절전 방지] 화면 보호기/화면 잠금 상태에서도 백그라운드 다운로드가 중단되지 않도록 보호됩니다.");
 
             await Task.Run(() =>
             {
@@ -253,6 +285,8 @@ namespace TokiNovelWpf
                     Dispatcher.Invoke(() =>
                     {
                         isDownloading = false;
+                        RestoreSystemSleep(); // 다운로드 완료 시 절전 락 해제
+
                         BtnStart.Visibility = Visibility.Visible;
                         BtnStop.Visibility = Visibility.Collapsed;
                         BtnInspect.IsEnabled = true;
@@ -289,6 +323,7 @@ namespace TokiNovelWpf
 
         private void BtnStop_Click(object sender, RoutedEventArgs e)
         {
+            RestoreSystemSleep();
             if (runningProcess != null && !runningProcess.HasExited)
             {
                 try
@@ -312,6 +347,7 @@ namespace TokiNovelWpf
 
         protected override void OnClosed(EventArgs e)
         {
+            RestoreSystemSleep();
             if (runningProcess != null && !runningProcess.HasExited)
             {
                 try { runningProcess.Kill(true); } catch { }
