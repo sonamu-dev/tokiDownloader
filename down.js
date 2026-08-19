@@ -39,6 +39,16 @@ function sanitizeFilename(name) {
     return name.replace(/[\\/:*?"<>|]/g, '_').trim();
 }
 
+function formatChapterTitle(num, rawTitle) {
+    const cleanNum = parseInt(num, 10) || 0;
+    const title = (rawTitle || '').trim();
+    if (!title) return `${cleanNum}화`;
+    if (/^(?:제\s*)?\d+\s*화/.test(title)) {
+        return title;
+    }
+    return `${cleanNum}화  ${title}`;
+}
+
 function analyseArguments() {
     let argL = process.argv.length;
     if (argL == 2) {
@@ -183,9 +193,19 @@ async function main() {
             link = link.concat(await page.evaluate(() => {
                 let list = Array.from(document.querySelector('.list-body').querySelectorAll('li'));
                 for (let i = 0; i < list.length; i++) {
+                    const rawNum = list[i].querySelector('.wr-num') ? list[i].querySelector('.wr-num').innerText.trim() : '';
+                    const rawTitle = list[i].querySelector('a').innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim();
+                    const numVal = parseInt(rawNum, 10) || (i + 1);
+
+                    // 회차 번호가 포함되지 않은 제목이면 "N화  제목" 형태로 가공
+                    let finalTitle = rawTitle;
+                    if (!/^(?:제\s*)?\d+\s*화/.test(rawTitle)) {
+                        finalTitle = `${numVal}화  ${rawTitle}`;
+                    }
+
                     list[i] = {
-                        num: list[i].querySelector('.wr-num').innerText.padStart(4, '0'),
-                        fileName: list[i].querySelector('a').innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim(),
+                        num: numVal.toString().padStart(4, '0'),
+                        fileName: finalTitle,
                         src: list[i].querySelector('a').href
                     }
                 }
@@ -307,24 +327,10 @@ async function main() {
             }
         }
 
-        // 소설 통합 텍스트 파일(목차 포함) 생성
+        // 소설 통합 텍스트 파일 생성
         if (info.site === "booktoki" && info.singleFile && collectedChapters.length > 0) {
-            console.log(`\n📄 소설 통합 텍스트 파일 생성 중 (목차 자동 삽입)...`);
-            const now = new Date();
-            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-            let fullBook = `================================================================\n`;
-            fullBook += `[ ${info.contentTitle} ]\n`;
-            fullBook += `총 ${collectedChapters.length}화 수집 (${startNum}화 ~ ${lastNum}화)\n`;
-            fullBook += `다운로드 일시: ${dateStr}\n`;
-            fullBook += `================================================================\n\n`;
-            fullBook += `[ 목차 ]\n`;
-
-            collectedChapters.forEach(c => {
-                fullBook += `${c.title}\n`;
-            });
-
-            fullBook += `\n================================================================\n\n\n`;
+            console.log(`\n📄 소설 통합 텍스트 파일 생성 중...`);
+            let fullBook = '';
 
             collectedChapters.forEach(c => {
                 fullBook += `=== ${c.title} ===\n\n`;

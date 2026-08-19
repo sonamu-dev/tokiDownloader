@@ -139,6 +139,16 @@
         return '소설';
     }
 
+    function formatChapterTitle(num, rawTitle) {
+        const cleanNum = parseInt(num, 10) || 0;
+        const title = (rawTitle || '').trim();
+        if (!title) return `${cleanNum}화`;
+        if (/^(?:제\s*)?\d+\s*화/.test(title)) {
+            return title;
+        }
+        return `${cleanNum}화  ${title}`;
+    }
+
     function parseEpisodesFromDoc(doc) {
         const listBody = doc.querySelector('.list-body');
         if (!listBody) return [];
@@ -158,13 +168,15 @@
             // <span> 태그 등 노이즈 제거한 순수 회차 제목
             const clone = linkEl.cloneNode(true);
             clone.querySelectorAll('span').forEach(s => s.remove());
-            const title = clone.innerText.trim();
+            const rawTitle = clone.innerText.trim();
+            const formattedTitle = formatChapterTitle(numVal, rawTitle);
             const url = linkEl.href;
 
             episodes.push({
                 num: numVal || 0,
                 numStr: numStr,
-                title: title || `${numVal}화`,
+                title: formattedTitle,
+                rawTitle: rawTitle,
                 url: url
             });
         });
@@ -973,10 +985,9 @@
                     const safeTitle = sanitizeFilename(this.seriesTitle);
                     const rangeLabel = `${startNum}화~${lastNum}화`;
 
-                    // 1) 통합 텍스트 파일 (.txt) - 서두에 목차 삽입
+                    // 1) 통합 텍스트 파일 (.txt)
                     if (format === 'single-txt') {
-                        const tocHeader = buildTableOfContents(this.seriesTitle, collectedChapters, startNum, lastNum);
-                        let finalBody = tocHeader;
+                        let finalBody = '';
 
                         collectedChapters.forEach(c => {
                             finalBody += `=== ${c.title} ===\n\n`;
@@ -990,8 +1001,6 @@
                     // 2) 회차별 분할 압축 파일 (.zip)
                     else if (format === 'zip-txt') {
                         const zip = new JSZip();
-                        const tocHeader = buildTableOfContents(this.seriesTitle, collectedChapters, startNum, lastNum);
-                        zip.file(`0000_목차.txt`, tocHeader);
 
                         collectedChapters.forEach(c => {
                             const padNum = String(c.num).padStart(4, '0');
