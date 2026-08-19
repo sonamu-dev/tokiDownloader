@@ -2,6 +2,12 @@
 node_modules/
 package-lock.json
 
+# C# Build Artifacts
+bin/
+obj/
+*.pdb
+app_bin/
+
 # Downloaded Novel & Comic Folders
 북토끼/
 뉴토끼/
