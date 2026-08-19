@@ -27,6 +27,11 @@ function help() {
     process.exit();
 }
 
+function sanitizeFilename(name) {
+    if (!name) return '';
+    return name.replace(/[\\/:*?"<>|]/g, '_').trim();
+}
+
 function analyseArguments() {
     let argL = process.argv.length;
     if (argL == 2) {
@@ -59,24 +64,29 @@ function analyseArguments() {
         consoleGrey('url을 입력하세요');
         process.exit();
     }
-    // check url
-    // 북토끼
-    if (info.url.match(/^https:\/\/booktoki[0-9]+.com\/novel\/[0-9]+/)) {
-        info.site = 'booktoki'; info.siteTitle = '북토끼';
-        info.protocolDomain = info.url.match(/^https:\/\/booktoki[0-9]+.com/)[0];
-    }
-    // 뉴토끼
-    else if (info.url.match(/^https:\/\/newtoki[0-9]+.com\/webtoon\/[0-9]+/)) {
-        info.site = 'newtoki'; info.siteTitle = '뉴토끼';
-        info.protocolDomain = info.url.match(/^https:\/\/newtoki[0-9]+.com/)[0];
-    }
-    // 마나토끼
-    else if (info.url.match(/^https:\/\/manatoki[0-9]+.net\/comic\/[0-9]+/)) {
-        info.site = 'manatoki'; info.siteTitle = '마나토끼';
-        info.protocolDomain = info.url.match(/^https:\/\/manatoki[0-9]+.net/)[0];
-    }
-    else {
-        consoleGrey('회차 목록 페이지 url을 입력해야합니다. url을 확인해주세요.');
+
+    try {
+        const parsedUrl = new URL(info.url);
+        info.protocolDomain = parsedUrl.origin;
+        const pathname = parsedUrl.pathname;
+        const hostname = parsedUrl.hostname.toLowerCase();
+
+        // 경로(/novel/, /webtoon/, /comic/)를 기준으로 판별
+        if (pathname.includes('/novel/')) {
+            info.site = 'booktoki';
+            info.siteTitle = hostname.includes('newtoki') ? '뉴토끼' : (hostname.includes('manatoki') ? '마나토끼' : '북토끼');
+        } else if (pathname.includes('/webtoon/')) {
+            info.site = 'newtoki';
+            info.siteTitle = '뉴토끼';
+        } else if (pathname.includes('/comic/')) {
+            info.site = 'manatoki';
+            info.siteTitle = '마나토끼';
+        } else {
+            consoleGrey('회차 목록 페이지 url을 입력해야합니다. (/novel/, /webtoon/, /comic/ 경로 확인 필요)');
+            process.exit();
+        }
+    } catch (error) {
+        consoleGrey('유효한 URL 형식이 아닙니다: ' + info.url);
         process.exit();
     }
 }
@@ -111,15 +121,19 @@ async function main() {
     try {
         // await page.goto('https://booktoki350.com/');
         await Promise.all([page.waitForNavigation(), page.goto(info.url)]);
-        // cloudflare에 막히기때문에 title이 바뀌기전까지 기다린다.
-        while (!(await page.title()).includes(info.siteTitle)) {
-            await sleep(100);
+        // cloudflare에 막히기때문에 title이 바뀌거나 본문이 로드될 때까지 기다린다.
+        while (true) {
+            const title = await page.title();
+            if (!title.includes('Just a moment') && !title.includes('Cloudflare') && title.length > 0) {
+                break;
+            }
+            await sleep(500);
         }
         let link = [];
         // 연재 목록들의 링크를 알아낸다. {num:회차, fileName:연재제목, src:링크}로 구성되어있다.
         while (true) {
             await page.locator('.list-body').setTimeout(40000).wait();
-            sleep(1000);
+            await sleep(1000);
             link = link.concat(await page.evaluate(() => {
                 let list = Array.from(document.querySelector('.list-body').querySelectorAll('li'));
                 for (let i = 0; i < list.length; i++) {
@@ -131,7 +145,12 @@ async function main() {
                 }
                 return list;
             }));
-            info.contentTitle = await page.evaluate(() => document.querySelector('.page-title .page-desc').innerText);
+            const rawTitle = await page.evaluate(() => {
+                const el = document.querySelector('.page-title .page-desc') || document.querySelector('.page-title');
+                return el ? el.innerText.trim() : '제목없음';
+            });
+            info.contentTitle = sanitizeFilename(rawTitle);
+
             // 다음 페이지가 없다면 break
             if (await page.$('ul.pagination li[class="active"] ~ li:not([class="disabled"]) a')) {
                 await Promise.all([
@@ -145,18 +164,19 @@ async function main() {
         // 1화부터 받을것이기 때문에 리버스 해준다.
         link.reverse();
         // info.startIndex와 info.lastIndex필터하기.
-        while (parseInt(link[0].num) < info.startIndex) {
+        while (link.length > 0 && parseInt(link[0].num) < info.startIndex) {
             link.shift();
         }
-        while (info.lastIndex < parseInt(link.at(-1).num)) {
+        while (link.length > 0 && info.lastIndex < parseInt(link.at(-1).num)) {
             link.pop();
         }
         // 페이지 방문하기
         for (let i = 0; i < link.length; i++) {
             await Promise.all([page.goto(link[i].src), page.waitForNavigation()]);
             await sleep(2000);
-            console.log(`${link[i].num} ${link[i].fileName} 진행중`);
-            // 북토끼
+            const safeFileName = sanitizeFilename(link[i].fileName);
+            console.log(`${link[i].num} ${safeFileName} 진행중`);
+            // 북토끼 (소설)
             if (info.site === "booktoki") {
                 await page.locator('#novel_content').wait();
                 // 텍스트 가져오기
@@ -165,10 +185,12 @@ async function main() {
                     return fileContent;
                 });
                 // 텍스트 저장. 이미 있다면 저장하지 않음.
-                if (!fs.existsSync(`./북토끼/${info.contentTitle}/${link[i].num} ${link[i].fileName}.txt`))
-                    saveBook(`./북토끼/${info.contentTitle}`, `${link[i].num} ${link[i].fileName}.txt`, fileContent);
+                const targetDir = `./북토끼/${info.contentTitle}`;
+                const targetFile = `${link[i].num} ${safeFileName}.txt`;
+                if (!fs.existsSync(`${targetDir}/${targetFile}`))
+                    saveBook(targetDir, targetFile, fileContent);
             }
-            // 뉴토끼, 마나토끼
+            // 뉴토끼, 마나토끼 (웹툰/만화)
             else {
                 await page.waitForSelector('.view-padding div img');
                 // 이미지 가져오기
@@ -181,11 +203,11 @@ async function main() {
                         if (imgLists[j].checkVisibility() === false)
                             imgLists.splice(j, 1);
                         else {
-                            let src = imgLists[j].outerHTML
+                            let src = imgLists[j].outerHTML;
                             try {
                                 // protocolDomain이 빠진 src이다.
                                 src = `${src.match(/\/data[^"]+/)[0]}`;
-                                const extension = src.match(/\.[a-zA-Z]+$/)[0]
+                                const extension = src.match(/\.[a-zA-Z]+$/)[0];
                                 returnList.push({ src, extension });
                             } 
                             catch (error) {}
@@ -198,8 +220,8 @@ async function main() {
                 let promiseList = [];
                 // 이미지들을 다운로드한다.
                 for (let j = 0; j < imgLists.length; j++) {
-                    const path = `./${info.siteTitle}/${info.contentTitle}/${link[i].num} ${link[i].fileName}`;
-                    const fileName = `${link[i].num} ${link[i].fileName} image${j.toString().padStart(4, '0')}${imgLists[j].extension}`;
+                    const path = `./${info.siteTitle}/${info.contentTitle}/${link[i].num} ${safeFileName}`;
+                    const fileName = `${link[i].num} ${safeFileName} image${j.toString().padStart(4, '0')}${imgLists[j].extension}`;
                     // 이미지 다운. 있다면 다운하지 않는다.
                     if (!fs.existsSync(`${path}/${fileName}`))
                         promiseList.push(saveImage(page, path, fileName, `${info.protocolDomain}${imgLists[j].src}`));

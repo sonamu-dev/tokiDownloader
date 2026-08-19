@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         tokiDownloader
 // @namespace    https://github.com/crossSiteKikyo/tokiDownloader
-// @version      0.0.3
+// @version      0.0.4
 // @description  북토끼, 뉴토끼, 마나토끼 다운로더
 // @author       hehaho
-// @match        https://*.com/webtoon/*
-// @match        https://*.com/novel/*
-// @match        https://*.net/comic/*
+// @match        *://*/*webtoon/*
+// @match        *://*/*novel/*
+// @match        *://*/*comic/*
 // @icon         https://github.com/user-attachments/assets/99f5bb36-4ef8-40cc-8ae5-e3bf1c7952ad
 // @grant        GM_registerMenuCommand
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
@@ -18,22 +18,36 @@
 (function () {
     'use strict';
 
-    let site = '뉴토끼'; // 예시
-    let protocolDomain = 'https://newtoki350.com'; // 예시
+    let site = '북토끼';
+    let protocolDomain = '';
+    
     // 현재 url 체크
     const currentURL = document.URL;
-    if (currentURL.match(/^https:\/\/booktoki[0-9]+.com\/novel\/[0-9]+/)) {
-        site = "북토끼"; protocolDomain = currentURL.match(/^https:\/\/booktoki[0-9]+.com/)[0];
-    }
-    else if (currentURL.match(/^https:\/\/newtoki[0-9]+.com\/webtoon\/[0-9]+/)) {
-        site = "뉴토끼"; protocolDomain = currentURL.match(/^https:\/\/newtoki[0-9]+.com/)[0];
-    }
-    else if (currentURL.match(/^https:\/\/manatoki[0-9]+.net\/comic\/[0-9]+/)) {
-        site = "마나토끼"; protocolDomain = currentURL.match(/^https:\/\/manatoki[0-9]+.net/)[0];
-    }
-    else {
-        // 다운 페이지가 아니라면 리턴. @match가 정규표현식이 아니기 때문에 정확한 host를 매치 할 수 없기 때문.
+    try {
+        const parsedURL = new URL(currentURL);
+        protocolDomain = parsedURL.origin;
+        const pathname = parsedURL.pathname;
+        const hostname = parsedURL.hostname.toLowerCase();
+
+        if (pathname.includes('/novel/')) {
+            site = "북토끼";
+        }
+        else if (pathname.includes('/webtoon/')) {
+            site = "뉴토끼";
+        }
+        else if (pathname.includes('/comic/')) {
+            site = "마나토끼";
+        }
+        else {
+            return;
+        }
+    } catch (e) {
         return;
+    }
+
+    function sanitizeFilename(name) {
+        if (!name) return '';
+        return name.replace(/[\\/:*?"<>|]/g, '_').trim();
     }
 
     function sleep(ms) {
