@@ -7,6 +7,8 @@ bin/
 obj/
 *.pdb
 app_bin/
+queue_history.json
+error_crash.log
 
 # Downloaded Novel & Comic Folders
 북토끼/

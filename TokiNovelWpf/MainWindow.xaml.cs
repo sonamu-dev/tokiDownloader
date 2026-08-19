@@ -82,6 +82,43 @@ namespace TokiNovelWpf
             {
                 TxtOutputDir.Text = Path.GetFullPath("./북토끼");
             }
+
+            LoadQueueFromFile();
+        }
+
+        private void SaveQueueToFile()
+        {
+            try
+            {
+                string json = System.Text.Json.JsonSerializer.Serialize(queueList, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText("queue_history.json", json);
+            }
+            catch { }
+        }
+
+        private void LoadQueueFromFile()
+        {
+            try
+            {
+                if (File.Exists("queue_history.json"))
+                {
+                    string json = File.ReadAllText("queue_history.json");
+                    var items = System.Text.Json.JsonSerializer.Deserialize<List<DownloadItem>>(json);
+                    if (items != null && items.Count > 0)
+                    {
+                        queueList.Clear();
+                        foreach (var it in items)
+                        {
+                            it.StatusText = "대기중";
+                            it.StatusBg = new SolidColorBrush(Color.FromRgb(71, 85, 105));
+                            queueList.Add(it);
+                        }
+                        ReindexQueue();
+                        AppendLog($"📋 이전 대기열 목록 {queueList.Count}개를 성공적으로 복원했습니다.");
+                    }
+                }
+            }
+            catch { }
         }
 
         private void PreventSystemSleep()
@@ -294,6 +331,7 @@ namespace TokiNovelWpf
             };
 
             queueList.Add(item);
+            SaveQueueToFile();
             AppendLog($"➕ 대기열에 추가됨: {finalTitle} ({rangeText})");
 
             BtnAddToQueue.IsEnabled = true;
@@ -306,12 +344,14 @@ namespace TokiNovelWpf
             {
                 queueList.Remove(selected);
                 ReindexQueue();
+                SaveQueueToFile();
             }
         }
 
         private void BtnClearQueue_Click(object sender, RoutedEventArgs e)
         {
             queueList.Clear();
+            SaveQueueToFile();
             AppendLog("🧹 대기열을 비웠습니다.");
         }
 
@@ -571,6 +611,7 @@ namespace TokiNovelWpf
         protected override void OnClosed(EventArgs e)
         {
             abortRequested = true;
+            SaveQueueToFile();
             RestoreSystemSleep();
             if (runningProcess != null && !runningProcess.HasExited)
             {
