@@ -112,17 +112,31 @@
                     console.log(`${i + 1}/${list.length} 진행중`);
 
                     const num = list[i].querySelector('.wr-num').innerText.padStart(4, '0');
-                    const fileName = list[i].querySelector('a').innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim();
+                    const fileName = sanitizeFilename(list[i].querySelector('a').innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim());
                     const src = list[i].querySelector('a').href;
                     await waitIframeLoad(src);
-                    await sleep(1000);
-                    const iframeDocument = iframe.contentWindow.document;
-                    // 소설 텍스트 추출
-                    const fileContent = iframeDocument.querySelector('#novel_content').innerText;
-                    // 이미지가 없다면 폴더를 만들지 않고 텍스트 파일 하나만 만든다.
+                    
+                    let fileContent = '';
+                    for (let attempt = 0; attempt < 20; attempt++) {
+                        await sleep(500);
+                        const iframeDocument = iframe.contentWindow.document;
+                        const host = iframeDocument.querySelector('[data-theme-novel-content]') || iframeDocument.querySelector('.theme-novel-content');
+                        if (host && host.shadowRoot) {
+                            const nonStyle = Array.from(host.shadowRoot.children).filter(c => c.tagName !== 'STYLE' && c.tagName !== 'SCRIPT');
+                            const pTexts = nonStyle.map(c => (c.innerText || c.textContent || '').trim()).filter(t => t.length > 0);
+                            if (pTexts.length > 0) {
+                                fileContent = pTexts.join('\n\n');
+                                break;
+                            }
+                        }
+                        const legacy = iframeDocument.querySelector('#novel_content');
+                        if (legacy && legacy.innerText && legacy.innerText.trim().length > 30) {
+                            fileContent = legacy.innerText.trim();
+                            break;
+                        }
+                    }
+
                     zip.file(`${num} ${fileName}.txt`, fileContent);
-                    // 이미지가 있다면 폴더를 만들어 그 안에 데이터를 넣는다. - 아직 이미지인 소설을 못찾음
-                    // zip.folder(`${num} ${fileName}`).file(`${num} ${fileName}.txt`, fileContent);
                 }
             }
             // 뉴토끼 또는 마나토끼
