@@ -1,10 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -12,6 +12,19 @@ using Microsoft.Win32;
 
 namespace TokiNovelWpf
 {
+    public class NovelMetaInfo
+    {
+        public string Url { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Author { get; set; } = "";
+        public string Genre { get; set; } = "";
+        public bool IsCompleted { get; set; }
+        public string PublishStatus { get; set; } = "연재중";
+        public int TotalEpisodes { get; set; }
+        public int MinNum { get; set; } = 1;
+        public int MaxNum { get; set; } = 99999;
+    }
+
     public class DownloadItem : INotifyPropertyChanged
     {
         public string Url { get; set; } = "";
@@ -43,6 +56,7 @@ namespace TokiNovelWpf
     public partial class MainWindow : Window
     {
         private ObservableCollection<DownloadItem> queueList = new ObservableCollection<DownloadItem>();
+        private Dictionary<string, NovelMetaInfo> metaCache = new Dictionary<string, NovelMetaInfo>();
         private Process? runningProcess;
         private bool isDownloading = false;
         private bool abortRequested = false;
@@ -112,20 +126,16 @@ namespace TokiNovelWpf
             }
         }
 
-        private async void BtnInspect_Click(object sender, RoutedEventArgs e)
+        private async Task<NovelMetaInfo?> FetchNovelMetaAsync(string url)
         {
-            string url = TxtUrl.Text.Trim();
-            if (string.IsNullOrEmpty(url))
+            if (metaCache.TryGetValue(url, out var cached))
             {
-                MessageBox.Show("소설 URL을 입력해주세요.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
+                return cached;
             }
 
-            BtnInspect.IsEnabled = false;
-            BtnInspect.Content = "조회 중...";
             AppendLog($"[조회] 소설 정보를 가져오는 중: {url}");
 
-            await Task.Run(() =>
+            return await Task.Run(() =>
             {
                 try
                 {
@@ -160,56 +170,57 @@ namespace TokiNovelWpf
                         using var doc = System.Text.Json.JsonDocument.Parse(jsonStr);
                         var root = doc.RootElement;
 
-                        string title = root.GetProperty("title").GetString() ?? "소설";
-                        string author = root.GetProperty("author").GetString() ?? "미상";
-                        string genre = root.GetProperty("firstGenre").GetString() ?? "일반";
-                        bool isCompleted = root.GetProperty("isCompleted").GetBoolean();
-                        string publishStatus = root.GetProperty("publishStatus").GetString() ?? (isCompleted ? "완결" : "연재중");
-                        int totalEpisodes = root.GetProperty("totalEpisodes").GetInt32();
-                        int minNum = root.GetProperty("minNum").GetInt32();
-                        int maxNum = root.GetProperty("maxNum").GetInt32();
-
-                        Dispatcher.Invoke(() =>
+                        var meta = new NovelMetaInfo
                         {
-                            LblNovelTitle.Text = title;
-                            LblNovelAuthor.Text = $"✍️ 작가: {author}";
-                            LblNovelGenre.Text = $"🏷️ 장르: {genre}";
-                            LblNovelCount.Text = $"총 {totalEpisodes}화";
-                            LblNovelStatus.Text = publishStatus;
+                            Url = url,
+                            Title = root.GetProperty("title").GetString() ?? "소설",
+                            Author = root.GetProperty("author").GetString() ?? "미상",
+                            Genre = root.GetProperty("firstGenre").GetString() ?? "일반",
+                            IsCompleted = root.GetProperty("isCompleted").GetBoolean(),
+                            PublishStatus = root.GetProperty("publishStatus").GetString() ?? "연재중",
+                            TotalEpisodes = root.GetProperty("totalEpisodes").GetInt32(),
+                            MinNum = root.GetProperty("minNum").GetInt32(),
+                            MaxNum = root.GetProperty("maxNum").GetInt32()
+                        };
 
-                            if (isCompleted)
-                            {
-                                BadgeStatus.Background = new SolidColorBrush(Color.FromRgb(5, 150, 105)); // 초록
-                            }
-                            else
-                            {
-                                BadgeStatus.Background = new SolidColorBrush(Color.FromRgb(79, 70, 229)); // 인디고
-                            }
-
-                            RdoAll.Content = $"전체 다운로드 ({minNum}화 ~ {maxNum}화)";
-                            TxtStart.Text = minNum.ToString();
-                            TxtLast.Text = maxNum.ToString();
-
-                            PnlNovelInfo.Visibility = Visibility.Visible;
-                            AppendLog($"[조회 성공] {title} (작가: {author}, 장르: {genre}, 총 {totalEpisodes}화, {publishStatus})");
-                        });
-                    }
-                    else
-                    {
-                        Dispatcher.Invoke(() => AppendLog("[조회 실패] 소설 정보를 가져오지 못했습니다. URL을 확인해주세요."));
+                        metaCache[url] = meta;
+                        return meta;
                     }
                 }
                 catch (Exception ex)
                 {
                     Dispatcher.Invoke(() => AppendLog($"[조회 에러] {ex.Message}"));
                 }
+                return null;
             });
-
-            BtnInspect.IsEnabled = true;
-            BtnInspect.Content = "🔍 소설 정보 조회";
         }
 
-        private void BtnAddToQueue_Click(object sender, RoutedEventArgs e)
+        private void UpdateNovelInfoCard(NovelMetaInfo meta)
+        {
+            LblNovelTitle.Text = meta.Title;
+            LblNovelAuthor.Text = $"✍️ 작가: {meta.Author}";
+            LblNovelGenre.Text = $"🏷️ 장르: {meta.Genre}";
+            LblNovelCount.Text = $"총 {meta.TotalEpisodes}화";
+            LblNovelStatus.Text = meta.PublishStatus;
+
+            if (meta.IsCompleted)
+            {
+                BadgeStatus.Background = new SolidColorBrush(Color.FromRgb(5, 150, 105)); // 초록
+            }
+            else
+            {
+                BadgeStatus.Background = new SolidColorBrush(Color.FromRgb(79, 70, 229)); // 인디고
+            }
+
+            RdoAll.Content = $"전체 다운로드 ({meta.MinNum}화 ~ {meta.MaxNum}화)";
+            TxtStart.Text = meta.MinNum.ToString();
+            TxtLast.Text = meta.MaxNum.ToString();
+
+            PnlNovelInfo.Visibility = Visibility.Visible;
+            AppendLog($"[조회 성공] {meta.Title} (작가: {meta.Author}, 장르: {meta.Genre}, 총 {meta.TotalEpisodes}화, {meta.PublishStatus})");
+        }
+
+        private async void BtnInspect_Click(object sender, RoutedEventArgs e)
         {
             string url = TxtUrl.Text.Trim();
             if (string.IsNullOrEmpty(url))
@@ -218,26 +229,61 @@ namespace TokiNovelWpf
                 return;
             }
 
+            BtnInspect.IsEnabled = false;
+            BtnInspect.Content = "조회 중...";
+
+            var meta = await FetchNovelMetaAsync(url);
+            if (meta != null)
+            {
+                UpdateNovelInfoCard(meta);
+            }
+            else
+            {
+                AppendLog("[조회 실패] 소설 정보를 가져오지 못했습니다. URL을 확인해주세요.");
+            }
+
+            BtnInspect.IsEnabled = true;
+            BtnInspect.Content = "🔍 소설 정보 조회";
+        }
+
+        private async void BtnAddToQueue_Click(object sender, RoutedEventArgs e)
+        {
+            string url = TxtUrl.Text.Trim();
+            if (string.IsNullOrEmpty(url))
+            {
+                MessageBox.Show("소설 URL을 입력해주세요.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            BtnAddToQueue.IsEnabled = false;
+            BtnAddToQueue.Content = "추가 중...";
+
+            // 소설 정보를 먼저 정확하게 조회 (캐시가 있으면 즉시 반환, 없으면 안전하게 조회)
+            var meta = await FetchNovelMetaAsync(url);
+            if (meta != null)
+            {
+                UpdateNovelInfoCard(meta);
+            }
+
             int start = 1;
-            int last = 99999;
-            string rangeText = "전체";
+            int last = meta != null ? meta.MaxNum : 99999;
+            string rangeText = meta != null && meta.IsCompleted ? $"1~{meta.MaxNum}화 [완결]" : $"전체 (1~{last}화)";
 
             if (RdoRange.IsChecked == true)
             {
                 int.TryParse(TxtStart.Text, out start);
                 int.TryParse(TxtLast.Text, out last);
                 if (start <= 0) start = 1;
-                if (last <= 0) last = 99999;
+                if (last <= 0) last = (meta != null ? meta.MaxNum : 99999);
                 rangeText = $"{start}화~{last}화";
             }
 
-            string title = PnlNovelInfo.Visibility == Visibility.Visible ? LblNovelTitle.Text : url;
-            if (title.Length > 30) title = title.Substring(0, 30) + "...";
+            string finalTitle = meta != null ? meta.Title : url;
 
             var item = new DownloadItem
             {
                 Url = url,
-                Title = title,
+                Title = finalTitle,
                 StartNum = start,
                 LastNum = last,
                 OutputDir = TxtOutputDir.Text.Trim(),
@@ -248,7 +294,10 @@ namespace TokiNovelWpf
             };
 
             queueList.Add(item);
-            AppendLog($"➕ 대기열에 추가됨: {title} ({rangeText})");
+            AppendLog($"➕ 대기열에 추가됨: {finalTitle} ({rangeText})");
+
+            BtnAddToQueue.IsEnabled = true;
+            BtnAddToQueue.Content = "➕ 대기열에 추가";
         }
 
         private void BtnRemoveSelected_Click(object sender, RoutedEventArgs e)
@@ -286,6 +335,7 @@ namespace TokiNovelWpf
                     return;
                 }
                 BtnAddToQueue_Click(sender, e);
+                await Task.Delay(500);
             }
 
             isDownloading = true;

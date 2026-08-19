@@ -128,7 +128,7 @@
             <RowDefinition Height="Auto"/> <!-- Options Card -->
             <RowDefinition Height="Auto"/> <!-- Queue List Card -->
             <RowDefinition Height="Auto"/> <!-- Progress Card -->
-            <RowDefinition Height="Auto"/> <!-- Power Auto Shutdown Card (독립 대형 강조 카드) -->
+            <RowDefinition Height="Auto"/> <!-- Power Auto Shutdown Card -->
             <RowDefinition Height="*"/>    <!-- Console Log & Action Button -->
         </Grid.RowDefinitions>
 
@@ -162,7 +162,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="TxtUrl" Style="{StaticResource ModernTextBoxStyle}" Text="https://newtoki1.org/novel/63587" Grid.Column="0" Margin="0,0,8,0"/>
                     <Button x:Name="BtnInspect" Style="{StaticResource SecondaryButtonStyle}" Content="🔍 소설 정보 조회" Grid.Column="1" Margin="0,0,6,0" Click="BtnInspect_Click"/>
-                    <Button x:Name="BtnAddToQueue" Style="{StaticResource SecondaryButtonStyle}" Background="#3B2E58" Content="➕ 대기열에 추가" Grid.Column="2" Click="BtnAddToQueue_Click"/>
+                    <Button x:Name="BtnAddToQueue" Style="{StaticResource SecondaryButtonStyle}" Background="#4F46E5" Content="➕ 대기열에 추가" Grid.Column="2" Click="BtnAddToQueue_Click"/>
                 </Grid>
             </StackPanel>
         </Border>
@@ -170,13 +170,13 @@
         <!-- 3. 소설 정보 카드 (분석 시 노출) -->
         <Border x:Name="PnlNovelInfo" Grid.Row="2" Background="#161B30" BorderBrush="#2D3759" BorderThickness="1" CornerRadius="14" Padding="16,12" Margin="0,0,0,10" Visibility="Collapsed">
             <StackPanel>
-                <TextBlock x:Name="LblNovelTitle" Text="EX급 흡혈헌터는 살고 싶다" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,6"/>
+                <TextBlock x:Name="LblNovelTitle" Text="소설 제목" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,6"/>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock x:Name="LblNovelAuthor" Text="✍️ 작가: 아이스망고" FontSize="13" Foreground="#E2E8F0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblNovelAuthor" Text="✍️ 작가: -" FontSize="13" Foreground="#E2E8F0" VerticalAlignment="Center"/>
                     <TextBlock Text=" • " FontSize="13" Foreground="#64748B" VerticalAlignment="Center" Margin="6,0,6,0"/>
-                    <TextBlock x:Name="LblNovelGenre" Text="🏷️ 장르: 판타지" FontSize="13" Foreground="#E2E8F0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="LblNovelGenre" Text="🏷️ 장르: -" FontSize="13" Foreground="#E2E8F0" VerticalAlignment="Center"/>
                     <TextBlock Text=" • " FontSize="13" Foreground="#64748B" VerticalAlignment="Center" Margin="6,0,6,0"/>
-                    <TextBlock x:Name="LblNovelCount" Text="총 300화" FontSize="13" Foreground="#E2E8F0" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock x:Name="LblNovelCount" Text="총 0화" FontSize="13" Foreground="#E2E8F0" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <Border x:Name="BadgeStatus" Background="#059669" CornerRadius="6" Padding="6,2" VerticalAlignment="Center">
                         <TextBlock x:Name="LblNovelStatus" Text="완결" FontSize="11" FontWeight="Bold" Foreground="White"/>
                     </Border>
@@ -187,7 +187,7 @@
         <!-- 4. 다운로드 범위 및 저장 폴더 카드 -->
         <Border Grid.Row="3" Background="{StaticResource CardBg}" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" CornerRadius="14" Padding="14" Margin="0,0,0,10">
             <StackPanel>
-                <TextBlock Text="⚙️ 다운로드 범위 및 저장 폴더" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextMuted}" Margin="0,0,0,8"/>
+                <TextBlock Text="⚙️ 다운로드 범위 및 저장 폴더" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextMuted}" Margin="0,0,8,0"/>
                 
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <RadioButton x:Name="RdoAll" Content="전체 다운로드" IsChecked="True" Foreground="White" Margin="0,0,16,0" Checked="RdoRange_CheckedChanged" Unchecked="RdoRange_CheckedChanged"/>
@@ -222,21 +222,21 @@
                     </StackPanel>
                 </Grid>
 
-                <ListBox x:Name="LstQueue" Height="80" Background="#090D18" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" 
+                <ListBox x:Name="LstQueue" Height="90" Background="#090D18" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" 
                          Foreground="White" FontSize="12" ScrollViewer.VerticalScrollBarVisibility="Auto">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="4,2">
+                            <Grid Margin="4,3">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding IndexStr}" FontWeight="Bold" Foreground="#A855F7" Margin="0,0,8,0"/>
-                                <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="SemiBold" Grid.Column="1" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding RangeStr}" Foreground="#94A3B8" Grid.Column="2" Margin="10,0,10,0"/>
-                                <Border Background="{Binding StatusBg}" CornerRadius="4" Padding="6,1" Grid.Column="3">
+                                <TextBlock Text="{Binding IndexStr}" FontWeight="Bold" Foreground="#A855F7" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold" FontSize="12.5" Grid.Column="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding RangeStr}" Foreground="#94A3B8" Grid.Column="2" Margin="12,0,12,0" VerticalAlignment="Center"/>
+                                <Border Background="{Binding StatusBg}" CornerRadius="4" Padding="7,2" Grid.Column="3" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="Bold" Foreground="White"/>
                                 </Border>
                             </Grid>
@@ -260,7 +260,7 @@
             </StackPanel>
         </Border>
 
-        <!-- 7. ⚡ 자동 전원 종료 전용 강조 카드 (눈에 확 들어오는 Amber/Gold 디자인) -->
+        <!-- 7. ⚡ 자동 전원 종료 전용 강조 카드 -->
         <Border Grid.Row="6" Background="#261A05" BorderBrush="#F59E0B" BorderThickness="1.5" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
             <Grid>
                 <Grid.ColumnDefinitions>
