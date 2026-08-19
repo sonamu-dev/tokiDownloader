@@ -990,7 +990,7 @@
                         let finalBody = '';
 
                         collectedChapters.forEach(c => {
-                            finalBody += `=== ${c.title} ===\n\n`;
+                            finalBody += `${c.title}\n\n`;
                             finalBody += `${c.content}\n\n\n`;
                         });
 

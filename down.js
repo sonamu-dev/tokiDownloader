@@ -333,7 +333,7 @@ async function main() {
             let fullBook = '';
 
             collectedChapters.forEach(c => {
-                fullBook += `=== ${c.title} ===\n\n`;
+                fullBook += `${c.title}\n\n`;
                 fullBook += `${c.content}\n\n\n`;
             });
 
