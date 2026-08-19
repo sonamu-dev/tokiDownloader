@@ -8,7 +8,9 @@ let info = {
     site: 'booktoki',
     startIndex: 0,
     lastIndex: 99999,
-    contentTitle: '화산귀환'
+    contentTitle: '소설',
+    outputDir: '',
+    singleFile: true // 통합 텍스트 파일(목차 포함) 기본 생성
 }
 
 function sleep(ms) {
@@ -23,7 +25,12 @@ function consoleGrey(val) {
     console.log(`\x1b[100m${val}\x1b[0m`);
 }
 function help() {
-    console.log(`사용법: node down -url "URL" [-start STARTINDEX] [-last LASTINDEX]`);
+    console.log(`사용법: node down -url "URL" [-start STARTINDEX] [-last LASTINDEX] [-out "경로"] [-split]`);
+    console.log(`  -url   : 소설/웹툰 목록 페이지 URL (예: https://newtoki1.org/novel/63587)`);
+    console.log(`  -start : 시작 회차 번호 (기본값: 1)`);
+    console.log(`  -last  : 끝 회차 번호 (기본값: 마지막)`);
+    console.log(`  -out   : 다운로드 저장 폴더 경로 지정`);
+    console.log(`  -split : 통합 파일 대신 화별 분할 파일로만 저장`);
     process.exit();
 }
 
@@ -55,6 +62,15 @@ function analyseArguments() {
                 info.lastIndex = parseInt(process.argv[i + 1]);
                 i++;
             }
+        }
+        else if (process.argv[i] == '-out') {
+            if ((i + 1) < argL) {
+                info.outputDir = process.argv[i + 1];
+                i++;
+            }
+        }
+        else if (process.argv[i] == '-split') {
+            info.singleFile = false;
         }
         else if (process.argv[i] == '-h' || process.argv[i] == '-help') {
             help();
@@ -209,33 +225,51 @@ async function main() {
             link.pop();
         }
         // 페이지 방문하기
+        const collectedChapters = [];
+        const baseDir = info.outputDir ? info.outputDir : `./북토끼/${info.contentTitle}`;
+        const startNum = link.length > 0 ? parseInt(link[0].num) : 1;
+        const lastNum = link.length > 0 ? parseInt(link.at(-1).num) : 1;
+
         for (let i = 0; i < link.length; i++) {
             const safeFileName = sanitizeFilename(link[i].fileName);
-            console.log(`${link[i].num} ${safeFileName} 진행중`);
+            console.log(`[${i + 1}/${link.length}] ${link[i].num} ${safeFileName} 진행중`);
 
-            // 북토끼 (소설)
+            // 북토끼 / 뉴토끼 소설
             if (info.site === "booktoki") {
-                const targetDir = `./북토끼/${info.contentTitle}`;
+                const targetDir = `${baseDir}/개별화`;
                 const targetFile = `${link[i].num} ${safeFileName}.txt`;
 
-                // 이미 존재하면 스킵
+                let fileContent = '';
+                // 이미 존재하면 읽어오기
                 if (fs.existsSync(`${targetDir}/${targetFile}`)) {
-                    console.log(`이미 저장된 파일: ${targetFile}`);
-                    continue;
+                    console.log(`이미 저장된 파일에서 로드: ${targetFile}`);
+                    fileContent = fs.readFileSync(`${targetDir}/${targetFile}`, 'utf8');
+                } else {
+                    await page.goto(link[i].src, { waitUntil: 'domcontentloaded' });
+                    fileContent = await getNovelContent(page);
+                    if (fileContent && fileContent.length > 0) {
+                        saveBook(targetDir, targetFile, fileContent);
+                        console.log(`  -> ${link[i].num} ${safeFileName} 저장 완료 (${fileContent.length}자)`);
+                    } else {
+                        consoleGrey(`  -> 본문 추출 실패: ${link[i].num} ${safeFileName}`);
+                    }
+                    // WAF 차단 방지 지터 딜레이 (1.5초 ~ 2.5초)
+                    const jitter = 1500 + Math.random() * 1000;
+                    await sleep(jitter);
                 }
 
-                await page.goto(link[i].src, { waitUntil: 'domcontentloaded' });
-                const fileContent = await getNovelContent(page);
                 if (fileContent && fileContent.length > 0) {
-                    saveBook(targetDir, targetFile, fileContent);
-                    console.log(`${link[i].num} ${safeFileName} 저장 완료 (${fileContent.length}자)`);
-                } else {
-                    consoleGrey(`본문 추출 실패: ${link[i].num} ${safeFileName}`);
+                    collectedChapters.push({
+                        num: link[i].num,
+                        title: link[i].fileName,
+                        content: fileContent
+                    });
                 }
             }
             // 뉴토끼, 마나토끼 (웹툰/만화)
             else {
-                const path = `./${info.siteTitle}/${info.contentTitle}/${link[i].num} ${safeFileName}`;
+                const comicBase = info.outputDir ? info.outputDir : `./${info.siteTitle}/${info.contentTitle}`;
+                const path = `${comicBase}/${link[i].num} ${safeFileName}`;
                 await page.goto(link[i].src, { waitUntil: 'domcontentloaded' });
                 await page.waitForSelector('.view-padding div img', { timeout: 30000 }).catch(() => {});
                 
@@ -269,7 +303,37 @@ async function main() {
                         promiseList.push(saveImage(page, path, fileName, `${info.protocolDomain}${imgLists[j].src}`));
                 }
                 await Promise.all(promiseList);
+                await sleep(1500 + Math.random() * 1000);
             }
+        }
+
+        // 소설 통합 텍스트 파일(목차 포함) 생성
+        if (info.site === "booktoki" && info.singleFile && collectedChapters.length > 0) {
+            console.log(`\n📄 소설 통합 텍스트 파일 생성 중 (목차 자동 삽입)...`);
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            let fullBook = `================================================================\n`;
+            fullBook += `[ ${info.contentTitle} ]\n`;
+            fullBook += `총 ${collectedChapters.length}화 수집 (${startNum}화 ~ ${lastNum}화)\n`;
+            fullBook += `다운로드 일시: ${dateStr}\n`;
+            fullBook += `================================================================\n\n`;
+            fullBook += `[ 목차 ]\n`;
+
+            collectedChapters.forEach(c => {
+                fullBook += `${c.title}\n`;
+            });
+
+            fullBook += `\n================================================================\n\n\n`;
+
+            collectedChapters.forEach(c => {
+                fullBook += `=== ${c.title} ===\n\n`;
+                fullBook += `${c.content}\n\n\n`;
+            });
+
+            const singleFileName = `${sanitizeFilename(info.contentTitle)} [${startNum}화~${lastNum}화].txt`;
+            saveBook(baseDir, singleFileName, fullBook);
+            console.log(`🎉 통합 텍스트 파일 생성 완료: ${baseDir}/${singleFileName}`);
         }
     } catch (error) {
         console.log(error);
