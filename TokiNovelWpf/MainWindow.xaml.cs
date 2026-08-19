@@ -474,28 +474,32 @@ namespace TokiNovelWpf
 
         private void ParseOutput(string line, DownloadItem item)
         {
-            AppendLog(line);
-
-            // 진행률 파싱: [1/50] 0001 1화 진행중
-            Match match = Regex.Match(line, @"\[(\d+)/(\d+)\]\s+(.*?)\s+진행중");
-            if (match.Success)
+            Dispatcher.Invoke(() =>
             {
-                int current = int.Parse(match.Groups[1].Value);
-                int total = int.Parse(match.Groups[2].Value);
-                string title = match.Groups[3].Value;
-                int percent = (int)((double)current / total * 100);
+                AppendLog(line);
 
-                ProgBar.Value = Math.Min(100, Math.Max(0, percent));
-                LblPercent.Text = $"{percent}%";
-                LblProgressText.Text = $"진행: {current} / {total}화 ({percent}%)";
-                LblCurrentTask.Text = $"⏳ [{title}] 수집 중...";
-                item.StatusText = $"{percent}%";
-            }
+                // 진행률 파싱: [1/50] 0001 1화 진행중
+                Match match = Regex.Match(line, @"\[(\d+)/(\d+)\]\s+(.*?)\s+진행중");
+                if (match.Success)
+                {
+                    int current = int.Parse(match.Groups[1].Value);
+                    int total = int.Parse(match.Groups[2].Value);
+                    string title = match.Groups[3].Value;
+                    int percent = (int)((double)current / total * 100);
 
-            if (line.Contains("통합 텍스트 파일 생성 완료:"))
-            {
-                LblCurrentTask.Text = line;
-            }
+                    ProgBar.Value = Math.Min(100, Math.Max(0, percent));
+                    LblPercent.Text = $"{percent}%";
+                    LblProgressText.Text = $"진행: {current} / {total}화 ({percent}%)";
+                    LblCurrentTask.Text = $"⏳ [{title}] 수집 중...";
+                    item.StatusText = $"{percent}%";
+                    item.StatusBg = new SolidColorBrush(Color.FromRgb(168, 85, 247)); // 퍼플
+                }
+
+                if (line.Contains("통합 텍스트 파일 생성 완료:"))
+                {
+                    LblCurrentTask.Text = line;
+                }
+            });
         }
 
         private void ExecuteSystemShutdown()
@@ -543,6 +547,12 @@ namespace TokiNovelWpf
 
         private void AppendLog(string msg)
         {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => AppendLog(msg));
+                return;
+            }
+
             string timeStr = DateTime.Now.ToString("HH:mm:ss");
             TxtConsoleLog.AppendText($"\n[{timeStr}] {msg}");
             LogScrollViewer.ScrollToEnd();
