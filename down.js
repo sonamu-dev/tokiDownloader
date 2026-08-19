@@ -82,6 +82,9 @@ function analyseArguments() {
         else if (process.argv[i] == '-split') {
             info.singleFile = false;
         }
+        else if (process.argv[i] == '-inspect') {
+            info.inspectOnly = true;
+        }
         else if (process.argv[i] == '-h' || process.argv[i] == '-help') {
             help();
         }
@@ -288,6 +291,23 @@ async function main() {
         }
         // 1화부터 받을것이기 때문에 리버스 해준다.
         link.reverse();
+
+        // 소설 정보 사전 조회(-inspect) 모드인 경우 JSON 출력 후 즉시 종료
+        if (info.inspectOnly) {
+            const resultData = {
+                title: info.contentTitle,
+                author: info.author || '미상',
+                firstGenre: info.genre || '일반',
+                isCompleted: info.isCompleted,
+                publishStatus: info.publishStatus || (info.isCompleted ? '완결' : '연재중'),
+                totalEpisodes: link.length,
+                minNum: link.length > 0 ? parseInt(link[0].num) : 1,
+                maxNum: link.length > 0 ? parseInt(link.at(-1).num) : 1
+            };
+            console.log("JSON_OUTPUT:" + JSON.stringify(resultData));
+            await browser.close();
+            return;
+        }
         // info.startIndex와 info.lastIndex필터하기.
         while (link.length > 0 && parseInt(link[0].num) < info.startIndex) {
             link.shift();

@@ -62,16 +62,95 @@ namespace TokiNovelWpf
 
             await Task.Run(() =>
             {
-                System.Threading.Thread.Sleep(800);
-            });
+                try
+                {
+                    string rootDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..\\..\\..\\"));
+                    if (!File.Exists(Path.Combine(rootDir, "down.js")))
+                    {
+                        rootDir = AppDomain.CurrentDomain.BaseDirectory;
+                    }
 
-            // 소설 정보 표시 카드 노출
-            LblNovelTitle.Text = "소설 정보 분석 완료";
-            LblNovelAuthor.Text = "✍️ 작가: 자동 감지됨";
-            LblNovelGenre.Text = "🏷️ 장르: 웹소설";
-            LblNovelCount.Text = "다운로드 준비 완료";
-            LblNovelStatus.Text = "다운로드 가능";
-            PnlNovelInfo.Visibility = Visibility.Visible;
+                    ProcessStartInfo psi = new ProcessStartInfo
+                    {
+                        FileName = "node",
+                        Arguments = $"down.js -url \"{url}\" -inspect",
+                        WorkingDirectory = rootDir,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        StandardOutputEncoding = System.Text.Encoding.UTF8,
+                        StandardErrorEncoding = System.Text.Encoding.UTF8
+                    };
+
+                    using Process proc = new Process { StartInfo = psi };
+                    string output = "";
+                    proc.OutputDataReceived += (s, ev) =>
+                    {
+                        if (!string.IsNullOrEmpty(ev.Data))
+                        {
+                            output += ev.Data + "\n";
+                        }
+                    };
+                    proc.Start();
+                    proc.BeginOutputReadLine();
+                    proc.WaitForExit();
+
+                    // JSON_OUTPUT:{...} 파싱
+                    Match match = Regex.Match(output, @"JSON_OUTPUT:(\{.*?\})");
+                    if (match.Success)
+                    {
+                        string jsonStr = match.Groups[1].Value;
+                        using var doc = System.Text.Json.JsonDocument.Parse(jsonStr);
+                        var root = doc.RootElement;
+
+                        string title = root.GetProperty("title").GetString() ?? "소설";
+                        string author = root.GetProperty("author").GetString() ?? "미상";
+                        string genre = root.GetProperty("firstGenre").GetString() ?? "일반";
+                        bool isCompleted = root.GetProperty("isCompleted").GetBoolean();
+                        string publishStatus = root.GetProperty("publishStatus").GetString() ?? (isCompleted ? "완결" : "연재중");
+                        int totalEpisodes = root.GetProperty("totalEpisodes").GetInt32();
+                        int minNum = root.GetProperty("minNum").GetInt32();
+                        int maxNum = root.GetProperty("maxNum").GetInt32();
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            LblNovelTitle.Text = title;
+                            LblNovelAuthor.Text = $"✍️ 작가: {author}";
+                            LblNovelGenre.Text = $"🏷️ 장르: {genre}";
+                            LblNovelCount.Text = $"총 {totalEpisodes}화";
+                            LblNovelStatus.Text = publishStatus;
+
+                            if (isCompleted)
+                            {
+                                BadgeStatus.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(5, 150, 105)); // 에메랄드 그린
+                            }
+                            else
+                            {
+                                BadgeStatus.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(79, 70, 229)); // 인디고 퍼플
+                            }
+
+                            RdoAll.Content = $"전체 다운로드 ({minNum}화 ~ {maxNum}화)";
+                            TxtStart.Text = minNum.ToString();
+                            TxtLast.Text = maxNum.ToString();
+
+                            PnlNovelInfo.Visibility = Visibility.Visible;
+                            AppendLog($"[조회 성공] {title} (작가: {author}, 장르: {genre}, 총 {totalEpisodes}화, {publishStatus})");
+                        });
+                    }
+                    else
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            AppendLog("[조회 실패] 소설 정보를 가져오지 못했습니다. URL을 확인해주세요.");
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() => AppendLog($"[조회 에러] {ex.Message}"));
+                }
+            });
 
             BtnInspect.IsEnabled = true;
             BtnInspect.Content = "🔍 소설 정보 조회";
