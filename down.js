@@ -211,19 +211,50 @@ async function main() {
                 }
                 return list;
             }));
-            const rawTitle = await page.evaluate(() => {
+            const metaInfo = await page.evaluate(() => {
                 const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
-                if (ogTitle) return ogTitle.split(' - ')[0].trim();
-                if (document.title) return document.title.split(' - ')[0].trim();
-                const pageTitle = document.querySelector('.page-title');
+                let title = '';
+                if (ogTitle) title = ogTitle.split(' - ')[0].trim();
+                else if (document.title) title = document.title.split(' - ')[0].trim();
+                const pageTitle = document.querySelector('.page-title span') || document.querySelector('.page-title');
                 if (pageTitle) {
                     const clone = pageTitle.cloneNode(true);
                     clone.querySelectorAll('.page-desc, span').forEach(e => e.remove());
-                    return clone.innerText.trim();
+                    const t = clone.innerText.trim();
+                    if (t) title = t;
                 }
-                return '제목없음';
+                title = (title || '제목없음').replace(/웹소설.*$/, '').trim();
+
+                // 작가명
+                const authorEl = document.querySelector('a[href*="author="]');
+                const author = authorEl ? authorEl.innerText.trim() : '';
+
+                // 장르 (1번째 장르)
+                let firstGenre = '';
+                const allTextElements = Array.from(document.querySelectorAll('td, div, tr, p, span'));
+                for (const el of allTextElements) {
+                    const t = el.innerText || '';
+                    if (t.startsWith('장르') || t.includes('\n장르\n') || t.includes('장르\n') || t.includes('장르 :')) {
+                        const match = t.match(/장르\s*[\n:]\s*([^\n]+)/);
+                        if (match) {
+                            const rawGenres = match[1].split(',');
+                            if (rawGenres.length > 0 && rawGenres[0].trim()) {
+                                firstGenre = rawGenres[0].trim();
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!firstGenre) {
+                    const genreLink = document.querySelector('a[href*="genre="], a[href*="tag="]');
+                    if (genreLink) firstGenre = genreLink.innerText.trim();
+                }
+
+                return { title, author, firstGenre };
             });
-            info.contentTitle = sanitizeFilename(rawTitle);
+            info.contentTitle = sanitizeFilename(metaInfo.title);
+            info.author = sanitizeFilename(metaInfo.author);
+            info.genre = sanitizeFilename(metaInfo.firstGenre);
 
             // 다음 페이지가 없다면 break
             if (await page.$('ul.pagination li[class="active"] ~ li:not([class="disabled"]) a')) {
@@ -337,7 +368,12 @@ async function main() {
                 fullBook += `${c.content}\n\n\n`;
             });
 
-            const singleFileName = `${sanitizeFilename(info.contentTitle)} [${startNum}화~${lastNum}화].txt`;
+            let parts = [sanitizeFilename(info.contentTitle)];
+            if (info.author) parts.push(sanitizeFilename(info.author));
+            if (info.genre) parts.push(sanitizeFilename(info.genre));
+            const baseFileName = parts.join('-');
+
+            const singleFileName = `${baseFileName} [${startNum}화~${lastNum}화].txt`;
             saveBook(baseDir, singleFileName, fullBook);
             console.log(`🎉 통합 텍스트 파일 생성 완료: ${baseDir}/${singleFileName}`);
         }

@@ -126,17 +126,70 @@
     // =============================================================
     // 📖 소설 메타데이터 & 회차 목록 수집 엔진
     // =============================================================
-    function getSeriesTitle() {
-        const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
-        if (ogTitle) return ogTitle.split(' - ')[0].trim();
-        if (document.title) return document.title.split(' - ')[0].trim();
-        const pageTitle = document.querySelector('.page-title');
+    function getSeriesInfo(doc = document) {
+        const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+        let title = '';
+        if (ogTitle) title = ogTitle.split(' - ')[0].trim();
+        else if (doc.title) title = doc.title.split(' - ')[0].trim();
+        const pageTitle = doc.querySelector('.page-title span') || doc.querySelector('.page-title');
         if (pageTitle) {
             const clone = pageTitle.cloneNode(true);
             clone.querySelectorAll('.page-desc, span').forEach(e => e.remove());
-            return clone.innerText.trim();
+            const t = clone.innerText.trim();
+            if (t) title = t;
         }
-        return '소설';
+        title = (title || '소설').replace(/웹소설.*$/, '').trim();
+
+        // 작가명
+        const authorEl = doc.querySelector('a[href*="author="]');
+        const author = authorEl ? authorEl.innerText.trim() : '';
+
+        // 장르 (1번째 장르)
+        let firstGenre = '';
+        const allTextElements = Array.from(doc.querySelectorAll('td, div, tr, p, span'));
+        for (const el of allTextElements) {
+            const t = el.innerText || '';
+            if (t.startsWith('장르') || t.includes('\n장르\n') || t.includes('장르\n') || t.includes('장르 :')) {
+                const match = t.match(/장르\s*[\n:]\s*([^\n]+)/);
+                if (match) {
+                    const rawGenres = match[1].split(',');
+                    if (rawGenres.length > 0 && rawGenres[0].trim()) {
+                        firstGenre = rawGenres[0].trim();
+                        break;
+                    }
+                }
+            }
+        }
+        if (!firstGenre) {
+            const genreLink = doc.querySelector('a[href*="genre="], a[href*="tag="]');
+            if (genreLink) firstGenre = genreLink.innerText.trim();
+        }
+
+        return {
+            title,
+            author,
+            firstGenre
+        };
+    }
+
+    function formatNovelFileName(title, author, genre, rangeLabel) {
+        const safeTitle = sanitizeFilename(title);
+        const safeAuthor = sanitizeFilename(author);
+        const safeGenre = sanitizeFilename(genre);
+
+        let parts = [safeTitle];
+        if (safeAuthor) parts.push(safeAuthor);
+        if (safeGenre) parts.push(safeGenre);
+
+        const baseName = parts.join('-');
+        if (rangeLabel) {
+            return `${baseName} [${rangeLabel}].txt`;
+        }
+        return `${baseName}.txt`;
+    }
+
+    function getSeriesTitle() {
+        return getSeriesInfo().title;
     }
 
     function formatChapterTitle(num, rawTitle) {
@@ -638,7 +691,10 @@
     class TokiNovelGui {
         constructor() {
             this.episodes = [];
-            this.seriesTitle = getSeriesTitle();
+            this.seriesInfo = getSeriesInfo();
+            this.seriesTitle = this.seriesInfo.title;
+            this.author = this.seriesInfo.author;
+            this.genre = this.seriesInfo.firstGenre;
             this.isDownloading = false;
             this.abortFlag = false;
             this.selectedDirectoryHandle = null;
@@ -677,6 +733,10 @@
                     <div class="toki-card">
                         <div class="toki-card-title">소설 정보</div>
                         <div class="toki-series-name" id="toki-ui-title" title="${escapeXml(this.seriesTitle)}">${escapeXml(this.seriesTitle)}</div>
+                        <div style="font-size: 12px; color: #94a3b8; margin-bottom: 6px;">
+                            ${this.author ? `✍️ 작가: <b style="color:#e2e8f0;">${escapeXml(this.author)}</b>` : ''} 
+                            ${this.genre ? `&nbsp;|&nbsp; 🏷️ 장르: <b style="color:#e2e8f0;">${escapeXml(this.genre)}</b>` : ''}
+                        </div>
                         <div class="toki-series-meta">
                             <span id="toki-ui-count">감지된 회차: 로딩 중...</span>
                             <button class="toki-scan-btn" id="toki-btn-rescan">전체 목록 재스캔</button>
@@ -710,7 +770,7 @@
                         <div style="display: flex; flex-direction: column; gap: 10px;">
                             <div>
                                 <select class="toki-select" id="toki-select-format">
-                                    <option value="single-txt" selected>📄 통합 텍스트 파일 (.txt - 서두 목차 포함)</option>
+                                    <option value="single-txt" selected>📄 통합 텍스트 파일 (.txt - 작가/장르 포함)</option>
                                     <option value="zip-txt">📦 회차별 텍스트 압축 (.zip)</option>
                                     <option value="epub">📖 표준 전자책 (.epub)</option>
                                 </select>
@@ -982,8 +1042,8 @@
                 // 💾 파일 생성 및 저장
                 // =========================================================
                 if (collectedChapters.length > 0) {
-                    const safeTitle = sanitizeFilename(this.seriesTitle);
-                    const rangeLabel = `${startNum}화~${lastNum}화`;
+                    const isAll = (rangeType === 'all' || (this.episodes.length > 0 && startNum === this.episodes[0].num && lastNum === this.episodes[this.episodes.length - 1].num));
+                    const rangeLabel = isAll ? '' : `${startNum}화~${lastNum}화`;
 
                     // 1) 통합 텍스트 파일 (.txt)
                     if (format === 'single-txt') {
@@ -994,7 +1054,7 @@
                             finalBody += `${c.content}\n\n\n`;
                         });
 
-                        const fileName = `${safeTitle} [${rangeLabel}].txt`;
+                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel);
                         await this.saveFile(fileName, finalBody, 'text/plain;charset=utf-8');
                         this.log(`📄 통합 텍스트 저장 완료: ${fileName}`);
                     }
@@ -1009,14 +1069,14 @@
                         });
 
                         const zipBlob = await zip.generateAsync({ type: 'blob' });
-                        const fileName = `${safeTitle} [${rangeLabel}].zip`;
+                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel).replace(/\.txt$/, '.zip');
                         await this.saveBlob(fileName, zipBlob);
                         this.log(`📦 회차별 압축 저장 완료: ${fileName}`);
                     }
                     // 3) 전자책 (.epub)
                     else if (format === 'epub') {
                         const epubBlob = await this.buildEpubBlob(this.seriesTitle, collectedChapters, startNum, lastNum);
-                        const fileName = `${safeTitle} [${rangeLabel}].epub`;
+                        const fileName = formatNovelFileName(this.seriesTitle, this.author, this.genre, rangeLabel).replace(/\.txt$/, '.epub');
                         await this.saveBlob(fileName, epubBlob);
                         this.log(`📖 EPUB 전자책 저장 완료: ${fileName}`);
                     }
