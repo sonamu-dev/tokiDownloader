@@ -424,6 +424,15 @@ async function main() {
             const singleFileName = `${baseFileName} ${tag}.txt`;
             saveBook(baseDir, singleFileName, fullBook);
             console.log(`🎉 통합 텍스트 파일 생성 완료: ${baseDir}/${singleFileName}`);
+
+            // 통합 완료 후 임시 개별 파일 폴더 자동 삭제
+            const targetDir = `${baseDir}/개별화`;
+            if (fs.existsSync(targetDir)) {
+                try {
+                    fs.rmSync(targetDir, { recursive: true, force: true });
+                    console.log(`🧹 개별 임시 파일 정리 완료`);
+                } catch (e) {}
+            }
         }
     } catch (error) {
         console.log(error);

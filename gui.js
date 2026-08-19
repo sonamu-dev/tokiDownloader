@@ -507,6 +507,14 @@ async function startDownloadTask(config) {
             fs.writeFileSync(finalFilePath, fullBook, 'utf8');
             addLog(`🎉 통합 파일 생성 완료: ${finalFilePath}`);
 
+            // 통합 완료 후 임시 개별 파일 폴더 자동 삭제
+            if (fs.existsSync(individualDir)) {
+                try {
+                    fs.rmSync(individualDir, { recursive: true, force: true });
+                    addLog('🧹 개별 임시 파일 정리 완료');
+                } catch (e) {}
+            }
+
             currentDownload.stats.percent = 100;
             currentDownload.stats.status = 'completed';
 
