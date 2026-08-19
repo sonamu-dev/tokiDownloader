@@ -23,6 +23,27 @@ let currentDownload = {
     }
 };
 
+let shutdownTimer = null;
+
+function resetShutdownTimer() {
+    if (shutdownTimer) {
+        clearTimeout(shutdownTimer);
+        shutdownTimer = null;
+    }
+}
+
+function checkAutoShutdown() {
+    if (currentDownload.clients.size === 0 && !currentDownload.isRunning) {
+        resetShutdownTimer();
+        shutdownTimer = setTimeout(() => {
+            if (currentDownload.clients.size === 0 && !currentDownload.isRunning) {
+                console.log('🛑 GUI 창이 닫혀 프로그램을 완전히 종료합니다.');
+                process.exit(0);
+            }
+        }, 6000);
+    }
+}
+
 function broadcast(data) {
     const payload = `data: ${JSON.stringify(data)}\n\n`;
     for (const client of currentDownload.clients) {
@@ -228,7 +249,6 @@ async function inspectNovel(targetUrl) {
                 });
             }
 
-            // 페이지네이션 유무
             const hasPagination = !!document.querySelector('ul.pagination li[class="active"] ~ li:not([class="disabled"]) a');
 
             return {
@@ -533,12 +553,14 @@ const server = http.createServer(async (req, res) => {
         });
         res.write('\n');
         currentDownload.clients.add(res);
+        resetShutdownTimer();
 
         // 초기 상태 전송
         res.write(`data: ${JSON.stringify({ type: 'init', stats: currentDownload.stats })}\n\n`);
 
         req.on('close', () => {
             currentDownload.clients.delete(res);
+            checkAutoShutdown();
         });
         return;
     }
@@ -624,13 +646,42 @@ const server = http.createServer(async (req, res) => {
     res.end('Not Found');
 });
 
+function launchAppWindow(appUrl) {
+    if (process.platform === 'win32') {
+        const edgePaths = [
+            `${process.env['ProgramFiles(x86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
+            `${process.env.ProgramFiles}\\Microsoft\\Edge\\Application\\msedge.exe`
+        ];
+        const chromePaths = [
+            `${process.env.ProgramFiles}\\Google\\Chrome\\Application\\chrome.exe`,
+            `${process.env['ProgramFiles(x86)']}\\Google\\Chrome\\Application\\chrome.exe`
+        ];
+
+        let browserExe = null;
+        for (const p of [...edgePaths, ...chromePaths]) {
+            if (p && fs.existsSync(p)) {
+                browserExe = p;
+                break;
+            }
+        }
+
+        if (browserExe) {
+            // App Mode 실행: 주소창, 탭 바 없이 윈도우 데스크톱 앱 독립 창으로 실행
+            const appCmd = `"${browserExe}" --app="${appUrl}" --window-size=720,920`;
+            exec(appCmd, () => {});
+            return;
+        }
+
+        exec(`start ${appUrl}`, () => {});
+    } else {
+        exec(`open ${appUrl}`, () => {});
+    }
+}
+
 server.listen(PORT, () => {
     console.log(`\n==================================================`);
-    console.log(`🚀 Toki Novel Downloader GUI 가 실행되었습니다!`);
-    console.log(`🌐 접속 주소: http://localhost:${PORT}`);
+    console.log(`🚀 Toki Novel Downloader 윈도우 데스크톱 앱 실행 완료!`);
     console.log(`==================================================\n`);
 
-    // 윈도우 기본 브라우저 자동 오픈
-    const startCmd = process.platform === 'win32' ? `start http://localhost:${PORT}` : `open http://localhost:${PORT}`;
-    exec(startCmd, () => {});
+    launchAppWindow(`http://localhost:${PORT}`);
 });
