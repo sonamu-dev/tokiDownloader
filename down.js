@@ -177,10 +177,14 @@ async function getNovelContent(page) {
 }
 
 async function main() {
-    const isHeadless = info.headless === false ? false : 'auto';
+    const isHeadless = info.headless !== false;
+    const extraArgs = isHeadless
+        ? ['--window-position=-32000,-32000', '--window-size=1280,800', '--no-startup-window']
+        : [];
+
     const { browser, page } = await connect({
-        headless: isHeadless,
-        args: [],
+        headless: isHeadless ? 'auto' : false,
+        args: extraArgs,
         customConfig: {},
         turnstile: true, //captcha를 자동으로 풀것인지
         connectOption: { defaultViewport: null },

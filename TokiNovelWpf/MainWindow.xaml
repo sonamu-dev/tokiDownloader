@@ -102,7 +102,7 @@
             </Setter>
         </Style>
 
-        <!-- 커스텀 프로그레스바 스타일 -->
+        <!-- 커스텀 메인 프로그레스바 스타일 -->
         <Style x:Key="ModernProgressBarStyle" TargetType="ProgressBar">
             <Setter Property="Background" Value="#090D17"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -110,8 +110,27 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ProgressBar">
-                        <Grid>
+                        <Grid x:Name="TemplateRoot">
                             <Border Background="{TemplateBinding Background}" CornerRadius="6"/>
+                            <Border x:Name="PART_Track" CornerRadius="6"/>
+                            <Border x:Name="PART_Indicator" Background="{StaticResource ProgressGradient}" CornerRadius="6" HorizontalAlignment="Left"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 대기열 인라인 프로그레스바 스타일 (높이 20px) -->
+        <Style x:Key="QueueProgressBarStyle" TargetType="ProgressBar">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height" Value="20"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid x:Name="TemplateRoot">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="6"/>
+                            <Border x:Name="PART_Track" CornerRadius="6"/>
                             <Border x:Name="PART_Indicator" Background="{StaticResource ProgressGradient}" CornerRadius="6" HorizontalAlignment="Left"/>
                         </Grid>
                     </ControlTemplate>
@@ -269,7 +288,7 @@
                                 
                                 <!-- 책 제목과 화 수 뒤로부터 끝까지 프로그래스바 영역 -->
                                 <Grid Grid.Column="3" Height="20" VerticalAlignment="Center" Margin="0,0,4,0">
-                                    <ProgressBar Style="{StaticResource ModernProgressBarStyle}" Height="20" Minimum="0" Maximum="100" Value="{Binding ProgressValue}" Background="#1E293B"/>
+                                    <ProgressBar Style="{StaticResource QueueProgressBarStyle}" Height="20" Minimum="0" Maximum="100" Value="{Binding ProgressValue}"/>
                                     <TextBlock Text="{Binding StatusText}" Foreground="White" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Grid>
                             </Grid>
