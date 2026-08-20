@@ -20,6 +20,7 @@ namespace TokiNovelWpf
         public string OutputDir { get; set; } = "";
         public bool MakeEpub { get; set; } = false;
         public bool Headless { get; set; } = true;
+        public bool SafeCooldown { get; set; } = true;
     }
 
     public class NovelMetaInfo
@@ -119,7 +120,8 @@ namespace TokiNovelWpf
                     LastUrl = TxtUrl.Text.Trim(),
                     OutputDir = TxtOutputDir.Text.Trim(),
                     MakeEpub = ChkEpub.IsChecked == true,
-                    Headless = ChkHeadless.IsChecked == true
+                    Headless = ChkHeadless.IsChecked == true,
+                    SafeCooldown = ChkSafeCooldown.IsChecked == true
                 };
                 string json = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(filePath, json);
@@ -143,6 +145,7 @@ namespace TokiNovelWpf
                         if (!string.IsNullOrWhiteSpace(config.OutputDir)) TxtOutputDir.Text = config.OutputDir;
                         ChkEpub.IsChecked = config.MakeEpub;
                         ChkHeadless.IsChecked = config.Headless;
+                        ChkSafeCooldown.IsChecked = config.SafeCooldown;
                     }
                 }
             }
@@ -688,19 +691,22 @@ namespace TokiNovelWpf
                 {
                     bool isHeadless = true;
                     bool isEpub = false;
+                    bool isSafe = true;
                     Dispatcher.Invoke(() =>
                     {
                         isHeadless = ChkHeadless.IsChecked == true;
                         isEpub = ChkEpub.IsChecked == true;
+                        isSafe = ChkSafeCooldown.IsChecked == true;
                     });
                     string headlessArg = isHeadless ? "-headless" : "-show";
                     string epubArg = isEpub ? "-epub" : "";
+                    string safeArg = isSafe ? "-safe" : "-nosafe";
 
                     string rootDir = GetProjectRootDir();
                     ProcessStartInfo psi = new ProcessStartInfo
                     {
                         FileName = "node",
-                        Arguments = $"down.js -url \"{item.Url}\" -start {item.StartNum} -last {item.LastNum} -out \"{item.OutputDir}\" {headlessArg} {epubArg}".Trim(),
+                        Arguments = $"down.js -url \"{item.Url}\" -start {item.StartNum} -last {item.LastNum} -out \"{item.OutputDir}\" {headlessArg} {epubArg} {safeArg}".Trim(),
                         WorkingDirectory = rootDir,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,

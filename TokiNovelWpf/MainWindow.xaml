@@ -231,10 +231,21 @@
                     <Button x:Name="BtnOpenFolder" Style="{StaticResource SecondaryButtonStyle}" Content="📂 폴더 열기" Grid.Column="3" Click="BtnOpenFolder_Click" ToolTip="설정된 다운로드 저장 폴더를 윈도우 탐색기로 엽니다."/>
                 </Grid>
 
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                    <CheckBox x:Name="ChkHeadless" Content="👻 브라우저 창 숨기기 (백그라운드)" IsChecked="True" Foreground="#A5B4FC" FontSize="11.5" VerticalAlignment="Center" Margin="0,0,16,0" ToolTip="Chrome 창을 띄우지 않고 백그라운드에서 실행합니다. 본인의 평소 웹 서핑(Chrome/Edge 등)과 완전히 독립되어 실행됩니다."/>
-                    <CheckBox x:Name="ChkEpub" Content="📚 EPUB 전자책 함께 생성 (이북 리더기/스마트폰 완벽 호환)" IsChecked="False" Foreground="#38BDF8" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="소설 다운로드 완료 시 TXT 파일뿐만 아니라 목차와 서식이 포함된 표준 .epub 전자책 파일도 함께 생성합니다."/>
-                </StackPanel>
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <CheckBox x:Name="ChkHeadless" Grid.Row="0" Grid.Column="0" Content="👻 브라우저 창 숨기기 (백그라운드)" IsChecked="True" Foreground="#A5B4FC" FontSize="11.5" VerticalAlignment="Center" Margin="0,0,8,6" ToolTip="Chrome 창을 띄우지 않고 백그라운드에서 실행합니다."/>
+                    <CheckBox x:Name="ChkSafeCooldown" Grid.Row="0" Grid.Column="1" Content="☕ 안전 쿨다운 (150화마다 자동 휴식)" IsChecked="True" Foreground="#34D399" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,0,6" ToolTip="150화 연속 다운로드마다 60초간 잠시 휴식하여 사이트의 일일 조회 락을 사전에 예방합니다."/>
+                    
+                    <CheckBox x:Name="ChkEpub" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Content="📚 EPUB 전자책 함께 생성 (이북 리더기/스마트폰 완벽 호환)" IsChecked="False" Foreground="#38BDF8" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="소설 다운로드 완료 시 TXT 파일뿐만 아니라 목차와 서식이 포함된 표준 .epub 전자책 파일도 함께 생성합니다."/>
+                </Grid>
             </StackPanel>
         </Border>
 

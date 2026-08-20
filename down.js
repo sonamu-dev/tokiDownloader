@@ -13,6 +13,7 @@ let info = {
     outputDir: '',
     singleFile: true, // 통합 텍스트 파일(목차 포함) 기본 생성
     makeEpub: false,  // EPUB 전자책 파일 생성 옵션
+    safeCooldown: true, // 150화마다 60초 쿨다운 및 캡차 감지 자동 대기
     headless: false
 }
 
@@ -88,6 +89,12 @@ function analyseArguments() {
         else if (process.argv[i] == '-epub') {
             info.makeEpub = true;
         }
+        else if (process.argv[i] == '-safe') {
+            info.safeCooldown = true;
+        }
+        else if (process.argv[i] == '-nosafe') {
+            info.safeCooldown = false;
+        }
         else if (process.argv[i] == '-inspect') {
             info.inspectOnly = true;
         }
@@ -154,6 +161,12 @@ async function getNovelContent(page) {
     // 본문(Shadow DOM 또는 레거시 엘리먼트)이 로드될 때까지 최대 15초 대기
     for (let attempt = 0; attempt < 30; attempt++) {
         const text = await page.evaluate(() => {
+            // 0. 일일 조회 인증 락 감지
+            const bodyText = document.body ? (document.body.innerText || '') : '';
+            if (bodyText.includes('일일 조회 인증') || bodyText.includes('일일조회인증') || bodyText.includes('일반 소설 뷰어에서 인증')) {
+                return '__RATE_LIMIT_DETECTED__';
+            }
+
             // 1. 신규 Shadow DOM 웹소설 뷰어 지원
             const host = document.querySelector('[data-theme-novel-content]') || document.querySelector('.theme-novel-content');
             if (host && host.shadowRoot) {
@@ -172,6 +185,10 @@ async function getNovelContent(page) {
 
             return null;
         });
+
+        if (text === '__RATE_LIMIT_DETECTED__') {
+            return '__RATE_LIMIT_DETECTED__';
+        }
 
         if (text && text.length > 30) {
             return text;
@@ -412,6 +429,7 @@ async function main() {
 
         const startNum = link.length > 0 ? parseInt(link[0].num) : 1;
         const lastNum = link.length > 0 ? parseInt(link.at(-1).num) : 1;
+        let downloadedCountInSession = 0;
 
         for (let i = 0; i < link.length; i++) {
             const safeFileName = sanitizeFilename(link[i].fileName);
@@ -440,24 +458,47 @@ async function main() {
                         try {
                             await page.goto(link[i].src, { waitUntil: 'domcontentloaded' });
                             fileContent = await getNovelContent(page);
+
+                            // 일일 조회 인증 락 감지 시 120초 자동 쿨다운 대기
+                            if (fileContent === '__RATE_LIMIT_DETECTED__') {
+                                consoleGrey(`  ⚠️ [조회 제한 감지] 사이트 쿨다운을 위해 120초간 대기 후 자동 재시도합니다...`);
+                                for (let sec = 120; sec > 0; sec -= 30) {
+                                    console.log(`    ⏳ 락 해제 대기 중: ${sec}초 남음...`);
+                                    await sleep(30000);
+                                }
+                                fileContent = '';
+                                continue;
+                            }
+
                             if (fileContent && fileContent.length > 30) {
                                 saveBook(targetDir, targetFile, fileContent);
                                 console.log(`  -> ${link[i].num} ${safeFileName} 저장 완료 (${fileContent.length}자)`);
+                                downloadedCountInSession++;
                                 break;
                             }
                         } catch (err) {
                             consoleGrey(`  -> [재시도 ${retry}/3] 페이지 접속 오류: ${err.message}`);
                         }
-                        if (retry < 3) await sleep(1500);
+                        if (retry < 3) await sleep(2000);
                     }
 
                     if (!fileContent || fileContent.length <= 30) {
                         consoleGrey(`  -> 본문 추출 최종 실패: ${link[i].num} ${safeFileName}`);
                     }
 
-                    // WAF 차단 방지 지터 딜레이 (1.5초 ~ 2.5초)
-                    const jitter = 1500 + Math.random() * 1000;
-                    await sleep(jitter);
+                    // ☕ 배치 쿨다운: 150화 연속 다운로드 시 사이트 락 방지를 위해 60초 자동 휴식
+                    if (info.safeCooldown && downloadedCountInSession > 0 && downloadedCountInSession % 150 === 0) {
+                        console.log(`\n☕ [안전 쿨다운] ${downloadedCountInSession}화 연속 다운로드 완료! 캡차 락 방지를 위해 60초간 잠시 휴식합니다...`);
+                        for (let sec = 60; sec > 0; sec -= 15) {
+                            console.log(`  ⏳ 쿨다운 진행 중: ${sec}초 남음...`);
+                            await sleep(15000);
+                        }
+                        console.log(`✨ 쿨다운 완료! 다운로드를 계속 진행합니다.\n`);
+                    } else {
+                        // WAF 차단 방지 지터 딜레이 (1.5초 ~ 2.5초)
+                        const jitter = 1500 + Math.random() * 1000;
+                        await sleep(jitter);
+                    }
                 }
 
                 if (fileContent && fileContent.length > 30) {
