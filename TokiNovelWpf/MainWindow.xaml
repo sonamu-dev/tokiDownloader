@@ -192,9 +192,9 @@
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <RadioButton x:Name="RdoAll" Content="전체 다운로드" IsChecked="True" Foreground="White" Margin="0,0,16,0" Checked="RdoRange_CheckedChanged" Unchecked="RdoRange_CheckedChanged"/>
                     <RadioButton x:Name="RdoRange" Content="일부 범위:" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0" Checked="RdoRange_CheckedChanged" Unchecked="RdoRange_CheckedChanged"/>
-                    <TextBox x:Name="TxtStart" Style="{StaticResource ModernTextBoxStyle}" Text="1" Width="85" Padding="4,6" TextAlignment="Center" GotFocus="TxtRange_GotFocus" PreviewMouseDown="TxtRange_PreviewMouseDown" TextChanged="TxtRange_TextChanged"/>
+                    <TextBox x:Name="TxtStart" Style="{StaticResource ModernTextBoxStyle}" Text="1" Width="85" Padding="4,6" TextAlignment="Center" GotFocus="TxtRange_GotFocus" PreviewMouseLeftButtonDown="TxtRange_PreviewMouseLeftButtonDown" TextChanged="TxtRange_TextChanged"/>
                     <TextBlock Text="화 ~ " Foreground="White" VerticalAlignment="Center" Margin="6,0,6,0"/>
-                    <TextBox x:Name="TxtLast" Style="{StaticResource ModernTextBoxStyle}" Text="10" Width="85" Padding="4,6" TextAlignment="Center" GotFocus="TxtRange_GotFocus" PreviewMouseDown="TxtRange_PreviewMouseDown" TextChanged="TxtRange_TextChanged"/>
+                    <TextBox x:Name="TxtLast" Style="{StaticResource ModernTextBoxStyle}" Text="10" Width="85" Padding="4,6" TextAlignment="Center" GotFocus="TxtRange_GotFocus" PreviewMouseLeftButtonDown="TxtRange_PreviewMouseLeftButtonDown" TextChanged="TxtRange_TextChanged"/>
                     <TextBlock Text="화" Foreground="White" VerticalAlignment="Center" Margin="4,0,0,0"/>
                 </StackPanel>
 
@@ -222,23 +222,52 @@
                     </StackPanel>
                 </Grid>
 
-                <ListBox x:Name="LstQueue" Height="90" Background="#090D18" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" 
-                         Foreground="White" FontSize="12" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox x:Name="LstQueue" Height="105" Background="#090D18" BorderBrush="{StaticResource CardBorder}" BorderThickness="1" 
+                         Foreground="White" FontSize="12" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         HorizontalContentAlignment="Stretch">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="4,2"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="6" Margin="2,1">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter Property="Background" Value="#1E293B"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#141B2D"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="4,3">
+                            <Grid Margin="4,2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="110"/>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding IndexStr}" FontWeight="Bold" Foreground="#A855F7" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold" FontSize="12.5" Grid.Column="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding RangeStr}" Foreground="#94A3B8" Grid.Column="2" Margin="12,0,12,0" VerticalAlignment="Center"/>
-                                <Border Background="{Binding StatusBg}" CornerRadius="4" Padding="7,2" Grid.Column="3" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="Bold" Foreground="White"/>
-                                </Border>
+                                <TextBlock Text="{Binding Title}" Foreground="White" FontWeight="Bold" FontSize="12" Grid.Column="1" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding Title}"/>
+                                <TextBlock Text="{Binding RangeStr}" Foreground="#94A3B8" FontSize="11.5" Grid.Column="2" Margin="6,0,10,0" VerticalAlignment="Center"/>
+                                
+                                <!-- 책 제목과 화 수 뒤로부터 끝까지 프로그래스바 영역 -->
+                                <Grid Grid.Column="3" Height="20" VerticalAlignment="Center" Margin="0,0,4,0">
+                                    <ProgressBar Style="{StaticResource ModernProgressBarStyle}" Height="20" Minimum="0" Maximum="100" Value="{Binding ProgressValue}" Background="#1E293B"/>
+                                    <TextBlock Text="{Binding StatusText}" Foreground="White" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Grid>
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>

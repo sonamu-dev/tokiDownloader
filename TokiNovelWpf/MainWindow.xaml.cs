@@ -37,6 +37,13 @@ namespace TokiNovelWpf
         public string IndexStr { get; set; } = "[1]";
         public string RangeStr { get; set; } = "전체";
 
+        private double _progressValue = 0;
+        public double ProgressValue
+        {
+            get => _progressValue;
+            set { _progressValue = value; OnPropertyChanged(nameof(ProgressValue)); }
+        }
+
         private string _statusText = "대기중";
         public string StatusText
         {
@@ -142,7 +149,14 @@ namespace TokiNovelWpf
 
         private void RdoRange_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            // 사용자가 라디오 버튼을 토글할 때의 동작 (입력창은 항상 활성 유지)
+            if (RdoRange != null && RdoRange.IsChecked == true)
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    TxtStart?.Focus();
+                    TxtStart?.SelectAll();
+                }), System.Windows.Threading.DispatcherPriority.Input);
+            }
         }
 
         private void TxtRange_GotFocus(object sender, RoutedEventArgs e)
@@ -151,13 +165,19 @@ namespace TokiNovelWpf
             {
                 RdoRange.IsChecked = true;
             }
+            if (sender is TextBox tb)
+            {
+                tb.SelectAll();
+            }
         }
 
-        private void TxtRange_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        private void TxtRange_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (RdoRange != null && RdoRange.IsChecked != true)
+            if (sender is TextBox tb && !tb.IsKeyboardFocusWithin)
             {
-                RdoRange.IsChecked = true;
+                e.Handled = true;
+                tb.Focus();
+                tb.SelectAll();
             }
         }
 
@@ -525,7 +545,8 @@ namespace TokiNovelWpf
                     {
                         if (success)
                         {
-                            item.StatusText = "완료";
+                            item.ProgressValue = 100;
+                            item.StatusText = "완료 (100%)";
                             item.StatusBg = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // 에메랄드 그린
                         }
                         else
@@ -636,7 +657,8 @@ namespace TokiNovelWpf
                     LblPercent.Text = $"{percent}%";
                     LblProgressText.Text = $"진행: {current} / {total}화 ({percent}%)";
                     LblCurrentTask.Text = $"⏳ [{title}] 수집 중...";
-                    item.StatusText = $"{percent}%";
+                    item.ProgressValue = percent;
+                    item.StatusText = $"{percent}% ({current}/{total}화)";
                     item.StatusBg = new SolidColorBrush(Color.FromRgb(168, 85, 247)); // 퍼플
                 }
 
