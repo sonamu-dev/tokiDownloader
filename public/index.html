@@ -592,6 +592,18 @@
         });
     });
 
+    [startInp, lastInp].forEach(inp => {
+        inp.addEventListener('focus', () => {
+            const customRadio = document.querySelector('input[name="range-type"][value="custom"]');
+            if (customRadio && !customRadio.checked) {
+                customRadio.checked = true;
+                rangeBox.style.opacity = '1';
+                startInp.disabled = false;
+                lastInp.disabled = false;
+            }
+        });
+    });
+
     function setDownloadingState(isDownloading) {
         document.getElementById('btn-start').style.display = isDownloading ? 'none' : 'flex';
         document.getElementById('btn-stop').style.display = isDownloading ? 'flex' : 'none';

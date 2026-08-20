@@ -192,9 +192,9 @@
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <RadioButton x:Name="RdoAll" Content="전체 다운로드" IsChecked="True" Foreground="White" Margin="0,0,16,0" Checked="RdoRange_CheckedChanged" Unchecked="RdoRange_CheckedChanged"/>
                     <RadioButton x:Name="RdoRange" Content="일부 범위:" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0" Checked="RdoRange_CheckedChanged" Unchecked="RdoRange_CheckedChanged"/>
-                    <TextBox x:Name="TxtStart" Style="{StaticResource ModernTextBoxStyle}" Text="1" Width="50" IsEnabled="False" TextAlignment="Center"/>
-                    <TextBlock Text="화 ~ " Foreground="White" VerticalAlignment="Center" Margin="4,0,4,0"/>
-                    <TextBox x:Name="TxtLast" Style="{StaticResource ModernTextBoxStyle}" Text="10" Width="50" IsEnabled="False" TextAlignment="Center"/>
+                    <TextBox x:Name="TxtStart" Style="{StaticResource ModernTextBoxStyle}" Text="1" Width="85" Padding="4,6" TextAlignment="Center" GotFocus="TxtRange_GotFocus" PreviewMouseDown="TxtRange_PreviewMouseDown" TextChanged="TxtRange_TextChanged"/>
+                    <TextBlock Text="화 ~ " Foreground="White" VerticalAlignment="Center" Margin="6,0,6,0"/>
+                    <TextBox x:Name="TxtLast" Style="{StaticResource ModernTextBoxStyle}" Text="10" Width="85" Padding="4,6" TextAlignment="Center" GotFocus="TxtRange_GotFocus" PreviewMouseDown="TxtRange_PreviewMouseDown" TextChanged="TxtRange_TextChanged"/>
                     <TextBlock Text="화" Foreground="White" VerticalAlignment="Center" Margin="4,0,0,0"/>
                 </StackPanel>
 

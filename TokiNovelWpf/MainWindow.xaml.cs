@@ -7,6 +7,8 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
 
@@ -130,6 +132,8 @@ namespace TokiNovelWpf
             catch { }
         }
 
+        private bool isUpdatingTextProgrammatically = false;
+
         private void RestoreSystemSleep()
         {
             try
@@ -141,12 +145,69 @@ namespace TokiNovelWpf
 
         private void RdoRange_CheckedChanged(object sender, RoutedEventArgs e)
         {
-            if (TxtStart != null && TxtLast != null && RdoRange != null)
+            // 사용자가 라디오 버튼을 토글할 때의 동작 (입력창은 항상 활성 유지)
+        }
+
+        private void TxtRange_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (RdoRange != null && RdoRange.IsChecked != true)
             {
-                bool isRange = RdoRange.IsChecked == true;
-                TxtStart.IsEnabled = isRange;
-                TxtLast.IsEnabled = isRange;
+                RdoRange.IsChecked = true;
             }
+        }
+
+        private void TxtRange_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (RdoRange != null && RdoRange.IsChecked != true)
+            {
+                RdoRange.IsChecked = true;
+            }
+        }
+
+        private void TxtRange_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (isUpdatingTextProgrammatically) return;
+            if (RdoRange != null && RdoRange.IsChecked != true)
+            {
+                RdoRange.IsChecked = true;
+            }
+        }
+
+        private (int start, int last) ParseRangeNumbers(string startStr, string lastStr, int defaultMin, int defaultMax)
+        {
+            int start = defaultMin > 0 ? defaultMin : 1;
+            int last = defaultMax > 0 ? defaultMax : 99999;
+
+            string combined = $"{startStr} {lastStr}".Trim();
+            var matches = Regex.Matches(combined, @"\d+");
+            if (matches.Count >= 2)
+            {
+                if (int.TryParse(matches[0].Value, out int s) && s > 0) start = s;
+                if (int.TryParse(matches[1].Value, out int l) && l > 0) last = l;
+            }
+            else if (matches.Count == 1)
+            {
+                if (int.TryParse(matches[0].Value, out int num) && num > 0)
+                {
+                    if (Regex.IsMatch(startStr, @"\d+"))
+                    {
+                        start = num;
+                        last = defaultMax;
+                    }
+                    else
+                    {
+                        start = defaultMin;
+                        last = num;
+                    }
+                }
+            }
+
+            if (start > last)
+            {
+                (start, last) = (last, start);
+            }
+
+            return (start, last);
         }
 
         private void BtnBrowse_Click(object sender, RoutedEventArgs e)
@@ -254,13 +315,17 @@ namespace TokiNovelWpf
             // 사용자가 '일부 범위(RdoRange)'를 체크하고 이미 입력해둔 상태라면 덮어쓰지 않고 보존
             if (RdoRange.IsChecked != true)
             {
+                isUpdatingTextProgrammatically = true;
                 TxtStart.Text = meta.MinNum.ToString();
                 TxtLast.Text = meta.MaxNum.ToString();
+                isUpdatingTextProgrammatically = false;
             }
             else
             {
+                isUpdatingTextProgrammatically = true;
                 if (string.IsNullOrWhiteSpace(TxtStart.Text)) TxtStart.Text = meta.MinNum.ToString();
                 if (string.IsNullOrWhiteSpace(TxtLast.Text)) TxtLast.Text = meta.MaxNum.ToString();
+                isUpdatingTextProgrammatically = false;
             }
 
             PnlNovelInfo.Visibility = Visibility.Visible;
@@ -329,37 +394,29 @@ namespace TokiNovelWpf
                 BtnAddToQueue.Content = "➕ 대기열에 추가";
             }
 
-            int start = 1;
-            int last = meta != null ? meta.MaxNum : 99999;
+            int defaultMin = meta != null ? meta.MinNum : 1;
+            int defaultMax = meta != null ? meta.MaxNum : 99999;
+            int start;
+            int last;
             string rangeText;
 
             if (isRangeMode)
             {
-                // 사용자가 입력한 커스텀 범위 파싱
-                if (!int.TryParse(customStartText, out start) || start <= 0)
-                {
-                    start = meta != null ? meta.MinNum : 1;
-                }
-                if (!int.TryParse(customLastText, out last) || last <= 0)
-                {
-                    last = meta != null ? meta.MaxNum : 99999;
-                }
-
-                // 시작 번호가 끝 번호보다 큰 경우 스왑
-                if (start > last)
-                {
-                    (start, last) = (last, start);
-                }
+                // 스마트 범위 파싱: '971 , 1066', '971-1066', '971화', 쉼표/하이픈 등 모든 형식 완벽 지원
+                (start, last) = ParseRangeNumbers(customStartText, customLastText, defaultMin, defaultMax);
 
                 rangeText = $"{start}화~{last}화";
-                // UI 텍스트도 보정된 값으로 다시 표시
+
+                // UI 텍스트도 보정된 깔끔한 숫자 값으로 업데이트
+                isUpdatingTextProgrammatically = true;
                 TxtStart.Text = start.ToString();
                 TxtLast.Text = last.ToString();
+                isUpdatingTextProgrammatically = false;
             }
             else
             {
-                start = meta != null ? meta.MinNum : 1;
-                last = meta != null ? meta.MaxNum : 99999;
+                start = defaultMin;
+                last = defaultMax;
                 rangeText = meta != null && meta.IsCompleted ? $"{start}~{last}화 [완결]" : $"전체 ({start}~{last}화)";
             }
 
