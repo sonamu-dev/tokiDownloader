@@ -258,7 +258,7 @@ namespace TokiNovelWpf
                     ProcessStartInfo psi = new ProcessStartInfo
                     {
                         FileName = "node",
-                        Arguments = $"down.js -url \"{url}\" -inspect",
+                        Arguments = $"down.js -url \"{url}\" -inspect -headless",
                         WorkingDirectory = rootDir,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
@@ -593,11 +593,15 @@ namespace TokiNovelWpf
             {
                 try
                 {
+                    bool isHeadless = true;
+                    Dispatcher.Invoke(() => isHeadless = ChkHeadless.IsChecked == true);
+                    string headlessArg = isHeadless ? "-headless" : "-show";
+
                     string rootDir = GetProjectRootDir();
                     ProcessStartInfo psi = new ProcessStartInfo
                     {
                         FileName = "node",
-                        Arguments = $"down.js -url \"{item.Url}\" -start {item.StartNum} -last {item.LastNum} -out \"{item.OutputDir}\"",
+                        Arguments = $"down.js -url \"{item.Url}\" -start {item.StartNum} -last {item.LastNum} -out \"{item.OutputDir}\" {headlessArg}",
                         WorkingDirectory = rootDir,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,

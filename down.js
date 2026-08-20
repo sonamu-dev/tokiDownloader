@@ -10,7 +10,8 @@ let info = {
     lastIndex: 99999,
     contentTitle: '소설',
     outputDir: '',
-    singleFile: true // 통합 텍스트 파일(목차 포함) 기본 생성
+    singleFile: true, // 통합 텍스트 파일(목차 포함) 기본 생성
+    headless: false
 }
 
 function sleep(ms) {
@@ -84,6 +85,12 @@ function analyseArguments() {
         }
         else if (process.argv[i] == '-inspect') {
             info.inspectOnly = true;
+        }
+        else if (process.argv[i] == '-headless') {
+            info.headless = 'auto';
+        }
+        else if (process.argv[i] == '-show') {
+            info.headless = false;
         }
         else if (process.argv[i] == '-h' || process.argv[i] == '-help') {
             help();
@@ -170,8 +177,9 @@ async function getNovelContent(page) {
 }
 
 async function main() {
+    const isHeadless = info.headless === false ? false : 'auto';
     const { browser, page } = await connect({
-        headless: false,
+        headless: isHeadless,
         args: [],
         customConfig: {},
         turnstile: true, //captcha를 자동으로 풀것인지
