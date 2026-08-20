@@ -79,11 +79,8 @@ namespace TokiNovelWpf
             InitializeComponent();
             LstQueue.ItemsSource = queueList;
 
-            TxtOutputDir.Text = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..\\..\\..\\북토끼"));
-            if (!Directory.Exists(TxtOutputDir.Text))
-            {
-                TxtOutputDir.Text = Path.GetFullPath("./북토끼");
-            }
+            string rootDir = GetProjectRootDir();
+            TxtOutputDir.Text = Path.Combine(rootDir, "북토끼");
 
             LoadQueueFromFile();
         }
@@ -708,12 +705,23 @@ namespace TokiNovelWpf
 
         private string GetProjectRootDir()
         {
-            string rootDir = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..\\..\\..\\"));
-            if (!File.Exists(Path.Combine(rootDir, "down.js")))
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            // 1. 실행 파일과 같은 폴더에 down.js가 있는 경우
+            if (File.Exists(Path.Combine(baseDir, "down.js"))) return baseDir;
+
+            // 2. 상위 1~4단계 디렉토리 순차 탐색
+            string candidate = baseDir;
+            for (int i = 0; i < 4; i++)
             {
-                rootDir = AppDomain.CurrentDomain.BaseDirectory;
+                candidate = Path.GetFullPath(Path.Combine(candidate, ".."));
+                if (File.Exists(Path.Combine(candidate, "down.js"))) return candidate;
             }
-            return rootDir;
+
+            // 3. 작업 디렉토리
+            string currentDir = Directory.GetCurrentDirectory();
+            if (File.Exists(Path.Combine(currentDir, "down.js"))) return currentDir;
+
+            return baseDir;
         }
 
         protected override void OnClosed(EventArgs e)

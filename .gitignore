@@ -6,6 +6,7 @@ package-lock.json
 bin/
 obj/
 *.pdb
+*.exe
 app_bin/
 queue_history.json
 error_crash.log
