@@ -8,6 +8,7 @@
         Height="960" Width="740"
         MinHeight="850" MinWidth="680"
         WindowStartupLocation="CenterScreen"
+        Closing="Window_Closing"
         Background="#0B0F19"
         Foreground="#F8FAFC"
         FontFamily="Malgun Gothic, Segoe UI">
@@ -222,15 +223,18 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="📁 저장 폴더: " Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                     <TextBox x:Name="TxtOutputDir" Style="{StaticResource ModernTextBoxStyle}" Grid.Column="1" Margin="0,0,8,0"/>
-                    <Button x:Name="BtnBrowse" Style="{StaticResource SecondaryButtonStyle}" Content="📁 폴더 선택" Grid.Column="2" Click="BtnBrowse_Click"/>
+                    <Button x:Name="BtnBrowse" Style="{StaticResource SecondaryButtonStyle}" Content="📁 폴더 선택" Grid.Column="2" Margin="0,0,6,0" Click="BtnBrowse_Click"/>
+                    <Button x:Name="BtnOpenFolder" Style="{StaticResource SecondaryButtonStyle}" Content="📂 폴더 열기" Grid.Column="3" Click="BtnOpenFolder_Click" ToolTip="설정된 다운로드 저장 폴더를 윈도우 탐색기로 엽니다."/>
                 </Grid>
 
-                <Grid Margin="0,8,0,0">
-                    <CheckBox x:Name="ChkHeadless" Content="👻 브라우저 창 숨기기 (백그라운드에서 조용히 다운로드, 다른 웹 서핑 가능)" IsChecked="True" Foreground="#A5B4FC" FontSize="11.5" VerticalAlignment="Center" ToolTip="Chrome 창을 띄우지 않고 백그라운드에서 실행합니다. 본인의 평소 웹 서핑(Chrome/Edge 등)과 완전히 독립되어 실행됩니다."/>
-                </Grid>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <CheckBox x:Name="ChkHeadless" Content="👻 브라우저 창 숨기기 (백그라운드)" IsChecked="True" Foreground="#A5B4FC" FontSize="11.5" VerticalAlignment="Center" Margin="0,0,16,0" ToolTip="Chrome 창을 띄우지 않고 백그라운드에서 실행합니다. 본인의 평소 웹 서핑(Chrome/Edge 등)과 완전히 독립되어 실행됩니다."/>
+                    <CheckBox x:Name="ChkEpub" Content="📚 EPUB 전자책 함께 생성 (이북 리더기/스마트폰 완벽 호환)" IsChecked="False" Foreground="#38BDF8" FontSize="11.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="소설 다운로드 완료 시 TXT 파일뿐만 아니라 목차와 서식이 포함된 표준 .epub 전자책 파일도 함께 생성합니다."/>
+                </StackPanel>
             </StackPanel>
         </Border>
 

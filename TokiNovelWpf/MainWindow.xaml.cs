@@ -88,6 +88,7 @@ namespace TokiNovelWpf
 
             string rootDir = GetProjectRootDir();
             TxtOutputDir.Text = Path.Combine(rootDir, "북토끼");
+            RdoAll.IsChecked = true;
 
             LoadQueueFromFile();
         }
@@ -96,8 +97,10 @@ namespace TokiNovelWpf
         {
             try
             {
+                string rootDir = GetProjectRootDir();
+                string filePath = Path.Combine(rootDir, "queue_history.json");
                 string json = System.Text.Json.JsonSerializer.Serialize(queueList, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText("queue_history.json", json);
+                File.WriteAllText(filePath, json);
             }
             catch { }
         }
@@ -106,9 +109,11 @@ namespace TokiNovelWpf
         {
             try
             {
-                if (File.Exists("queue_history.json"))
+                string rootDir = GetProjectRootDir();
+                string filePath = Path.Combine(rootDir, "queue_history.json");
+                if (File.Exists(filePath))
                 {
-                    string json = File.ReadAllText("queue_history.json");
+                    string json = File.ReadAllText(filePath);
                     var items = System.Text.Json.JsonSerializer.Deserialize<List<DownloadItem>>(json);
                     if (items != null && items.Count > 0)
                     {
@@ -238,6 +243,28 @@ namespace TokiNovelWpf
             if (dialog.ShowDialog() == true)
             {
                 TxtOutputDir.Text = dialog.FolderName;
+            }
+        }
+
+        private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string targetDir = TxtOutputDir.Text.Trim();
+                if (!Directory.Exists(targetDir))
+                {
+                    Directory.CreateDirectory(targetDir);
+                }
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{targetDir}\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"폴더 열기 실패: {ex.Message}");
             }
         }
 
@@ -604,14 +631,20 @@ namespace TokiNovelWpf
                 try
                 {
                     bool isHeadless = true;
-                    Dispatcher.Invoke(() => isHeadless = ChkHeadless.IsChecked == true);
+                    bool isEpub = false;
+                    Dispatcher.Invoke(() =>
+                    {
+                        isHeadless = ChkHeadless.IsChecked == true;
+                        isEpub = ChkEpub.IsChecked == true;
+                    });
                     string headlessArg = isHeadless ? "-headless" : "-show";
+                    string epubArg = isEpub ? "-epub" : "";
 
                     string rootDir = GetProjectRootDir();
                     ProcessStartInfo psi = new ProcessStartInfo
                     {
                         FileName = "node",
-                        Arguments = $"down.js -url \"{item.Url}\" -start {item.StartNum} -last {item.LastNum} -out \"{item.OutputDir}\" {headlessArg}",
+                        Arguments = $"down.js -url \"{item.Url}\" -start {item.StartNum} -last {item.LastNum} -out \"{item.OutputDir}\" {headlessArg} {epubArg}".Trim(),
                         WorkingDirectory = rootDir,
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
@@ -676,7 +709,7 @@ namespace TokiNovelWpf
                     item.StatusBg = new SolidColorBrush(Color.FromRgb(168, 85, 247)); // 퍼플
                 }
 
-                if (line.Contains("통합 텍스트 파일 생성 완료:"))
+                if (line.Contains("통합 텍스트 파일 생성 완료:") || line.Contains("EPUB 전자책 생성 완료:"))
                 {
                     LblCurrentTask.Text = line;
                 }
@@ -708,6 +741,23 @@ namespace TokiNovelWpf
             }
         }
 
+        private void KillProcessTree(int? pid)
+        {
+            if (!pid.HasValue || pid.Value <= 0) return;
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = "taskkill",
+                    Arguments = $"/pid {pid.Value} /T /F",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                };
+                Process.Start(psi)?.WaitForExit(3000);
+            }
+            catch { }
+        }
+
         private void BtnStop_Click(object sender, RoutedEventArgs e)
         {
             abortRequested = true;
@@ -716,7 +766,7 @@ namespace TokiNovelWpf
             {
                 try
                 {
-                    runningProcess.Kill(true);
+                    KillProcessTree(runningProcess.Id);
                     AppendLog("🛑 사용자에 의해 다운로드 작업이 중단되었습니다.");
                 }
                 catch (Exception ex)
@@ -760,6 +810,32 @@ namespace TokiNovelWpf
             return baseDir;
         }
 
+        private void Window_Closing(object? sender, CancelEventArgs e)
+        {
+            if (isDownloading)
+            {
+                var result = MessageBox.Show(
+                    "⚠️ 현재 소설 다운로드가 진행 중입니다.\n\n정말 프로그램을 종료하시겠습니까?\n(받아둔 회차는 다음 실행 시 자동으로 이어받을 수 있습니다)",
+                    "다운로드 진행 중 종료 확인",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (result != MessageBoxResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
+
+            abortRequested = true;
+            SaveQueueToFile();
+            RestoreSystemSleep();
+            if (runningProcess != null && !runningProcess.HasExited)
+            {
+                KillProcessTree(runningProcess.Id);
+            }
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             abortRequested = true;
@@ -767,7 +843,7 @@ namespace TokiNovelWpf
             RestoreSystemSleep();
             if (runningProcess != null && !runningProcess.HasExited)
             {
-                try { runningProcess.Kill(true); } catch { }
+                KillProcessTree(runningProcess.Id);
             }
             base.OnClosed(e);
         }
