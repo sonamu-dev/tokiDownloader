@@ -14,6 +14,14 @@ using Microsoft.Win32;
 
 namespace TokiNovelWpf
 {
+    public class AppConfig
+    {
+        public string LastUrl { get; set; } = "";
+        public string OutputDir { get; set; } = "";
+        public bool MakeEpub { get; set; } = false;
+        public bool Headless { get; set; } = true;
+    }
+
     public class NovelMetaInfo
     {
         public string Url { get; set; } = "";
@@ -90,7 +98,55 @@ namespace TokiNovelWpf
             TxtOutputDir.Text = Path.Combine(rootDir, "북토끼");
             RdoAll.IsChecked = true;
 
+            LoadAppSettings();
             LoadQueueFromFile();
+
+            // 대기열에 항목이 있고 TxtUrl이 비어있으면 첫 번째 소설 URL을 TxtUrl에 채움
+            if (string.IsNullOrWhiteSpace(TxtUrl.Text) && queueList.Count > 0)
+            {
+                TxtUrl.Text = queueList[0].Url;
+            }
+        }
+
+        private void SaveAppSettings()
+        {
+            try
+            {
+                string rootDir = GetProjectRootDir();
+                string filePath = Path.Combine(rootDir, "app_settings.json");
+                var config = new AppConfig
+                {
+                    LastUrl = TxtUrl.Text.Trim(),
+                    OutputDir = TxtOutputDir.Text.Trim(),
+                    MakeEpub = ChkEpub.IsChecked == true,
+                    Headless = ChkHeadless.IsChecked == true
+                };
+                string json = System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(filePath, json);
+            }
+            catch { }
+        }
+
+        private void LoadAppSettings()
+        {
+            try
+            {
+                string rootDir = GetProjectRootDir();
+                string filePath = Path.Combine(rootDir, "app_settings.json");
+                if (File.Exists(filePath))
+                {
+                    string json = File.ReadAllText(filePath);
+                    var config = System.Text.Json.JsonSerializer.Deserialize<AppConfig>(json);
+                    if (config != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(config.LastUrl)) TxtUrl.Text = config.LastUrl;
+                        if (!string.IsNullOrWhiteSpace(config.OutputDir)) TxtOutputDir.Text = config.OutputDir;
+                        ChkEpub.IsChecked = config.MakeEpub;
+                        ChkHeadless.IsChecked = config.Headless;
+                    }
+                }
+            }
+            catch { }
         }
 
         private void SaveQueueToFile()
@@ -828,6 +884,7 @@ namespace TokiNovelWpf
             }
 
             abortRequested = true;
+            SaveAppSettings();
             SaveQueueToFile();
             RestoreSystemSleep();
             if (runningProcess != null && !runningProcess.HasExited)
@@ -839,6 +896,7 @@ namespace TokiNovelWpf
         protected override void OnClosed(EventArgs e)
         {
             abortRequested = true;
+            SaveAppSettings();
             SaveQueueToFile();
             RestoreSystemSleep();
             if (runningProcess != null && !runningProcess.HasExited)
