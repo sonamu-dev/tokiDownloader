@@ -250,8 +250,18 @@ namespace TokiNovelWpf
             }
 
             RdoAll.Content = $"전체 다운로드 ({meta.MinNum}화 ~ {meta.MaxNum}화)";
-            TxtStart.Text = meta.MinNum.ToString();
-            TxtLast.Text = meta.MaxNum.ToString();
+
+            // 사용자가 '일부 범위(RdoRange)'를 체크하고 이미 입력해둔 상태라면 덮어쓰지 않고 보존
+            if (RdoRange.IsChecked != true)
+            {
+                TxtStart.Text = meta.MinNum.ToString();
+                TxtLast.Text = meta.MaxNum.ToString();
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(TxtStart.Text)) TxtStart.Text = meta.MinNum.ToString();
+                if (string.IsNullOrWhiteSpace(TxtLast.Text)) TxtLast.Text = meta.MaxNum.ToString();
+            }
 
             PnlNovelInfo.Visibility = Visibility.Visible;
             AppendLog($"[조회 성공] {meta.Title} (작가: {meta.Author}, 장르: {meta.Genre}, 총 {meta.TotalEpisodes}화, {meta.PublishStatus})");
@@ -283,36 +293,74 @@ namespace TokiNovelWpf
             BtnInspect.Content = "🔍 소설 정보 조회";
         }
 
-        private async void BtnAddToQueue_Click(object sender, RoutedEventArgs e)
+        private async Task<bool> AddToQueueAsync()
         {
             string url = TxtUrl.Text.Trim();
             if (string.IsNullOrEmpty(url))
             {
                 MessageBox.Show("소설 URL을 입력해주세요.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
+                return false;
             }
+
+            // 사용자가 '일부 범위' 모드에서 입력한 시작/끝 값을 미리 캡처해 둠 (메타 조회 시 덮어쓰기 방지)
+            bool isRangeMode = RdoRange.IsChecked == true;
+            string customStartText = TxtStart.Text.Trim();
+            string customLastText = TxtLast.Text.Trim();
 
             BtnAddToQueue.IsEnabled = false;
             BtnAddToQueue.Content = "추가 중...";
 
-            // 소설 정보를 먼저 정확하게 조회 (캐시가 있으면 즉시 반환, 없으면 안전하게 조회)
-            var meta = await FetchNovelMetaAsync(url);
-            if (meta != null)
+            NovelMetaInfo? meta = null;
+            try
             {
-                UpdateNovelInfoCard(meta);
+                meta = await FetchNovelMetaAsync(url);
+                if (meta != null)
+                {
+                    UpdateNovelInfoCard(meta);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[경고] 메타 정보 조회 실패, 기본값 사용: {ex.Message}");
+            }
+            finally
+            {
+                BtnAddToQueue.IsEnabled = true;
+                BtnAddToQueue.Content = "➕ 대기열에 추가";
             }
 
             int start = 1;
             int last = meta != null ? meta.MaxNum : 99999;
-            string rangeText = meta != null && meta.IsCompleted ? $"1~{meta.MaxNum}화 [완결]" : $"전체 (1~{last}화)";
+            string rangeText;
 
-            if (RdoRange.IsChecked == true)
+            if (isRangeMode)
             {
-                int.TryParse(TxtStart.Text, out start);
-                int.TryParse(TxtLast.Text, out last);
-                if (start <= 0) start = 1;
-                if (last <= 0) last = (meta != null ? meta.MaxNum : 99999);
+                // 사용자가 입력한 커스텀 범위 파싱
+                if (!int.TryParse(customStartText, out start) || start <= 0)
+                {
+                    start = meta != null ? meta.MinNum : 1;
+                }
+                if (!int.TryParse(customLastText, out last) || last <= 0)
+                {
+                    last = meta != null ? meta.MaxNum : 99999;
+                }
+
+                // 시작 번호가 끝 번호보다 큰 경우 스왑
+                if (start > last)
+                {
+                    (start, last) = (last, start);
+                }
+
                 rangeText = $"{start}화~{last}화";
+                // UI 텍스트도 보정된 값으로 다시 표시
+                TxtStart.Text = start.ToString();
+                TxtLast.Text = last.ToString();
+            }
+            else
+            {
+                start = meta != null ? meta.MinNum : 1;
+                last = meta != null ? meta.MaxNum : 99999;
+                rangeText = meta != null && meta.IsCompleted ? $"{start}~{last}화 [완결]" : $"전체 ({start}~{last}화)";
             }
 
             string finalTitle = meta != null ? meta.Title : url;
@@ -333,9 +381,12 @@ namespace TokiNovelWpf
             queueList.Add(item);
             SaveQueueToFile();
             AppendLog($"➕ 대기열에 추가됨: {finalTitle} ({rangeText})");
+            return true;
+        }
 
-            BtnAddToQueue.IsEnabled = true;
-            BtnAddToQueue.Content = "➕ 대기열에 추가";
+        private async void BtnAddToQueue_Click(object sender, RoutedEventArgs e)
+        {
+            await AddToQueueAsync();
         }
 
         private void BtnRemoveSelected_Click(object sender, RoutedEventArgs e)
@@ -374,8 +425,8 @@ namespace TokiNovelWpf
                     MessageBox.Show("다운로드할 소설 URL을 입력하거나 대기열에 추가해주세요.", "알림", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
-                BtnAddToQueue_Click(sender, e);
-                await Task.Delay(500);
+                bool added = await AddToQueueAsync();
+                if (!added || queueList.Count == 0) return;
             }
 
             isDownloading = true;

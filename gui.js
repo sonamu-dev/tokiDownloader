@@ -236,8 +236,24 @@ async function inspectNovel(targetUrl) {
             let epList = [];
             for (let i = 0; i < list.length; i++) {
                 const rawNum = list[i].querySelector('.wr-num') ? list[i].querySelector('.wr-num').innerText.trim() : '';
-                const rawTitle = list[i].querySelector('a') ? list[i].querySelector('a').innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim() : '';
-                const numVal = parseInt(rawNum, 10) || (i + 1);
+                const linkEl = list[i].querySelector('a');
+                if (!linkEl) continue;
+                const rawTitle = linkEl.innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim();
+
+                let detectedNum = null;
+                const titleMatch = rawTitle.match(/(?:제\s*)?(\d+)\s*(?:화|회)/i)
+                    || rawTitle.match(/\[(?:제\s*)?(\d+)\]/)
+                    || rawTitle.match(/^(\d+)\s*[\.\-\:\s]/);
+                if (titleMatch) {
+                    const p = parseInt(titleMatch[1], 10);
+                    if (!isNaN(p) && p > 0) detectedNum = p;
+                }
+                if (detectedNum === null && rawNum) {
+                    const p = parseInt(rawNum, 10);
+                    if (!isNaN(p) && p > 0) detectedNum = p;
+                }
+                const numVal = detectedNum !== null ? detectedNum : (i + 1);
+
                 let finalTitle = rawTitle;
                 if (!/^(?:제\s*)?\d+\s*화/.test(rawTitle)) {
                     finalTitle = `${numVal}화  ${rawTitle}`;
@@ -245,7 +261,7 @@ async function inspectNovel(targetUrl) {
                 epList.push({
                     num: numVal,
                     title: finalTitle,
-                    url: list[i].querySelector('a')?.href
+                    url: linkEl.href
                 });
             }
 
@@ -317,21 +333,40 @@ async function startDownloadTask(config) {
 
             const pageLinks = await page.evaluate(() => {
                 let list = Array.from(document.querySelector('.list-body').querySelectorAll('li'));
-                return list.map((li, i) => {
+                const results = [];
+                for (let i = 0; i < list.length; i++) {
+                    const li = list[i];
+                    const linkEl = li.querySelector('a');
+                    if (!linkEl) continue;
                     const rawNum = li.querySelector('.wr-num') ? li.querySelector('.wr-num').innerText.trim() : '';
-                    const rawTitle = li.querySelector('a') ? li.querySelector('a').innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim() : '';
-                    const numVal = parseInt(rawNum, 10) || (i + 1);
+                    const rawTitle = linkEl.innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim();
+
+                    let detectedNum = null;
+                    const titleMatch = rawTitle.match(/(?:제\s*)?(\d+)\s*(?:화|회)/i)
+                        || rawTitle.match(/\[(?:제\s*)?(\d+)\]/)
+                        || rawTitle.match(/^(\d+)\s*[\.\-\:\s]/);
+                    if (titleMatch) {
+                        const p = parseInt(titleMatch[1], 10);
+                        if (!isNaN(p) && p > 0) detectedNum = p;
+                    }
+                    if (detectedNum === null && rawNum) {
+                        const p = parseInt(rawNum, 10);
+                        if (!isNaN(p) && p > 0) detectedNum = p;
+                    }
+                    const numVal = detectedNum !== null ? detectedNum : (i + 1);
+
                     let finalTitle = rawTitle;
                     if (!/^(?:제\s*)?\d+\s*화/.test(rawTitle)) {
                         finalTitle = `${numVal}화  ${rawTitle}`;
                     }
-                    return {
+                    results.push({
                         num: numVal.toString().padStart(4, '0'),
                         numVal: numVal,
                         fileName: finalTitle,
-                        src: li.querySelector('a')?.href
-                    };
-                });
+                        src: linkEl.href
+                    });
+                }
+                return results;
             });
 
             link = link.concat(pageLinks);
@@ -399,7 +434,14 @@ async function startDownloadTask(config) {
             }
         }
 
-        link.reverse(); // 1화부터 정렬
+        // 중복 제거 및 회차 번호 기준 정렬
+        const uniqueMap = new Map();
+        link.forEach(ep => {
+            if (ep && ep.src && !uniqueMap.has(ep.src)) {
+                uniqueMap.set(ep.src, ep);
+            }
+        });
+        link = Array.from(uniqueMap.values()).sort((a, b) => a.numVal - b.numVal);
         const rawTotalCount = link.length;
 
         // 범위 필터링

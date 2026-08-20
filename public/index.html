@@ -535,8 +535,14 @@
             const minNum = meta.episodes[0].num;
             const maxNum = meta.episodes[meta.episodes.length - 1].num;
             document.getElementById('ui-all-label').innerText = `${minNum}화 ~ ${maxNum}화`;
-            document.getElementById('input-start').value = minNum;
-            document.getElementById('input-last').value = maxNum;
+            const isCustom = document.querySelector('input[name="range-type"]:checked')?.value === 'custom';
+            if (!isCustom) {
+                document.getElementById('input-start').value = minNum;
+                document.getElementById('input-last').value = maxNum;
+            } else {
+                if (!document.getElementById('input-start').value) document.getElementById('input-start').value = minNum;
+                if (!document.getElementById('input-last').value) document.getElementById('input-last').value = maxNum;
+            }
         }
     }
 

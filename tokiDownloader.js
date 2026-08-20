@@ -238,19 +238,34 @@
         const items = Array.from(listBody.querySelectorAll('li'));
         const episodes = [];
 
-        items.forEach(li => {
+        items.forEach((li, idx) => {
             const numEl = li.querySelector('.wr-num');
             const linkEl = li.querySelector('a');
             if (!linkEl) return;
 
             const rawNum = numEl ? numEl.innerText.trim() : '';
-            const numVal = parseInt(rawNum, 10);
-            const numStr = isNaN(numVal) ? '0000' : numVal.toString().padStart(4, '0');
 
             // <span> 태그 등 노이즈 제거한 순수 회차 제목
             const clone = linkEl.cloneNode(true);
             clone.querySelectorAll('span').forEach(s => s.remove());
             const rawTitle = clone.innerText.trim();
+
+            // 1. 제목에서 회차 번호 우선 추출
+            let detectedNum = null;
+            const titleMatch = rawTitle.match(/(?:제\s*)?(\d+)\s*(?:화|회)/i)
+                || rawTitle.match(/\[(?:제\s*)?(\d+)\]/)
+                || rawTitle.match(/^(\d+)\s*[\.\-\:\s]/);
+            if (titleMatch) {
+                const p = parseInt(titleMatch[1], 10);
+                if (!isNaN(p) && p > 0) detectedNum = p;
+            }
+            if (detectedNum === null && rawNum) {
+                const p = parseInt(rawNum, 10);
+                if (!isNaN(p) && p > 0) detectedNum = p;
+            }
+            const numVal = detectedNum !== null ? detectedNum : (idx + 1);
+            const numStr = numVal.toString().padStart(4, '0');
+
             const formattedTitle = formatChapterTitle(numVal, rawTitle);
             const url = linkEl.href;
 

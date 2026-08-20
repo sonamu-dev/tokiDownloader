@@ -197,8 +197,28 @@ async function main() {
                 let list = Array.from(document.querySelector('.list-body').querySelectorAll('li'));
                 for (let i = 0; i < list.length; i++) {
                     const rawNum = list[i].querySelector('.wr-num') ? list[i].querySelector('.wr-num').innerText.trim() : '';
-                    const rawTitle = list[i].querySelector('a').innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim();
-                    const numVal = parseInt(rawNum, 10) || (i + 1);
+                    const linkEl = list[i].querySelector('a');
+                    if (!linkEl) continue;
+                    const rawTitle = linkEl.innerHTML.replace(/<span[\s\S]*?\/span>/g, '').trim();
+
+                    // 1. 제목에서 명시적인 회차 번호(예: "971화", "제 971화", "[971화]", "971.") 우선 추출
+                    let detectedNum = null;
+                    const titleMatch = rawTitle.match(/(?:제\s*)?(\d+)\s*(?:화|회)/i)
+                        || rawTitle.match(/\[(?:제\s*)?(\d+)\]/)
+                        || rawTitle.match(/^(\d+)\s*[\.\-\:\s]/);
+                    if (titleMatch) {
+                        const p = parseInt(titleMatch[1], 10);
+                        if (!isNaN(p) && p > 0) detectedNum = p;
+                    }
+
+                    // 2. 제목에 없으면 wr-num 사용
+                    if (detectedNum === null && rawNum) {
+                        const p = parseInt(rawNum, 10);
+                        if (!isNaN(p) && p > 0) detectedNum = p;
+                    }
+
+                    // 3. Fallback
+                    const numVal = detectedNum !== null ? detectedNum : (i + 1);
 
                     // 회차 번호가 포함되지 않은 제목이면 "N화  제목" 형태로 가공
                     let finalTitle = rawTitle;
@@ -209,10 +229,10 @@ async function main() {
                     list[i] = {
                         num: numVal.toString().padStart(4, '0'),
                         fileName: finalTitle,
-                        src: list[i].querySelector('a').href
+                        src: linkEl.href
                     }
                 }
-                return list;
+                return list.filter(item => item && item.src);
             }));
             const metaInfo = await page.evaluate(() => {
                 const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content');
@@ -289,8 +309,17 @@ async function main() {
             else
                 break;
         }
-        // 1화부터 받을것이기 때문에 리버스 해준다.
-        link.reverse();
+        // URL 기준 중복 제거 및 회차 번호 기준 오름차순 정렬
+        const uniqueMap = new Map();
+        link.forEach(ep => {
+            if (ep && ep.src && !uniqueMap.has(ep.src)) {
+                uniqueMap.set(ep.src, ep);
+            }
+        });
+        link = Array.from(uniqueMap.values()).sort((a, b) => parseInt(a.num, 10) - parseInt(b.num, 10));
+
+        const minDetected = link.length > 0 ? parseInt(link[0].num, 10) : 1;
+        const maxDetected = link.length > 0 ? parseInt(link.at(-1).num, 10) : 1;
 
         // 소설 정보 사전 조회(-inspect) 모드인 경우 JSON 출력 후 즉시 종료
         if (info.inspectOnly) {
@@ -301,19 +330,24 @@ async function main() {
                 isCompleted: info.isCompleted,
                 publishStatus: info.publishStatus || (info.isCompleted ? '완결' : '연재중'),
                 totalEpisodes: link.length,
-                minNum: link.length > 0 ? parseInt(link[0].num) : 1,
-                maxNum: link.length > 0 ? parseInt(link.at(-1).num) : 1
+                minNum: minDetected,
+                maxNum: maxDetected
             };
             console.log("JSON_OUTPUT:" + JSON.stringify(resultData));
             await browser.close();
             return;
         }
-        // info.startIndex와 info.lastIndex필터하기.
-        while (link.length > 0 && parseInt(link[0].num) < info.startIndex) {
-            link.shift();
-        }
-        while (link.length > 0 && info.lastIndex < parseInt(link.at(-1).num)) {
-            link.pop();
+
+        // info.startIndex와 info.lastIndex 필터하기
+        link = link.filter(ep => {
+            const n = parseInt(ep.num, 10);
+            return n >= info.startIndex && n <= info.lastIndex;
+        });
+
+        if (link.length === 0) {
+            consoleRed(`선택한 범위(${info.startIndex}화 ~ ${info.lastIndex}화)에 해당하는 회차가 없습니다.`);
+            await browser.close();
+            return;
         }
         // 페이지 방문하기
         const collectedChapters = [];
