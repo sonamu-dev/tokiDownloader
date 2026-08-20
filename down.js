@@ -373,7 +373,43 @@ async function main() {
         }
         // 페이지 방문하기
         const collectedChapters = [];
-        const baseDir = info.outputDir ? info.outputDir : `./북토끼/${info.contentTitle}`;
+        let folderNameParts = [sanitizeFilename(info.contentTitle)];
+        if (info.author && info.author !== '미상') {
+            folderNameParts.push(sanitizeFilename(info.author));
+        }
+        const novelFolderName = folderNameParts.join('-');
+
+        let baseDir;
+        if (info.outputDir) {
+            // outputDir 끝이 이미 해당 소설 폴더가 아니면 하위에 소설 폴더 생성
+            const sanitizedOutputDir = info.outputDir.replace(/\\/g, '/');
+            if (sanitizedOutputDir.endsWith(novelFolderName) || sanitizedOutputDir.endsWith(sanitizeFilename(info.contentTitle))) {
+                baseDir = info.outputDir;
+            } else {
+                baseDir = `${info.outputDir}/${novelFolderName}`;
+            }
+        } else {
+            baseDir = `./북토끼/${novelFolderName}`;
+        }
+
+        if (!fs.existsSync(baseDir)) {
+            fs.mkdirSync(baseDir, { recursive: true });
+        }
+
+        // 소설 폴더 안에 원본 URL 및 메타 정보 자동 보존
+        const nowStr = new Date().toLocaleString('ko-KR');
+        const urlInfoContent = `[소설 정보]
+제목: ${info.contentTitle}
+작가: ${info.author || '미상'}
+장르: ${info.genre || '일반'}
+상태: ${info.publishStatus || (info.isCompleted ? '완결' : '연재중')}
+총 회차: ${link.length}화 (${info.startIndex}화 ~ ${info.lastIndex}화)
+원본 URL: ${info.url}
+수집 일시: ${nowStr}
+`;
+        saveBook(baseDir, 'url.txt', `${info.url}\n`);
+        saveBook(baseDir, '소설정보.txt', urlInfoContent);
+
         const startNum = link.length > 0 ? parseInt(link[0].num) : 1;
         const lastNum = link.length > 0 ? parseInt(link.at(-1).num) : 1;
 
