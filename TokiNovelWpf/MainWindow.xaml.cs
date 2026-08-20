@@ -270,12 +270,18 @@ namespace TokiNovelWpf
 
                     using Process proc = new Process { StartInfo = psi };
                     string output = "";
+                    string errorOut = "";
                     proc.OutputDataReceived += (s, ev) =>
                     {
                         if (!string.IsNullOrEmpty(ev.Data)) output += ev.Data + "\n";
                     };
+                    proc.ErrorDataReceived += (s, ev) =>
+                    {
+                        if (!string.IsNullOrEmpty(ev.Data)) errorOut += ev.Data + "\n";
+                    };
                     proc.Start();
                     proc.BeginOutputReadLine();
+                    proc.BeginErrorReadLine();
                     proc.WaitForExit();
 
                     Match match = Regex.Match(output, @"JSON_OUTPUT:(\{.*?\})");
@@ -300,6 +306,10 @@ namespace TokiNovelWpf
 
                         metaCache[url] = meta;
                         return meta;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(errorOut))
+                    {
+                        Dispatcher.Invoke(() => AppendLog($"[조회 내부 에러] {errorOut.Trim()}"));
                     }
                 }
                 catch (Exception ex)

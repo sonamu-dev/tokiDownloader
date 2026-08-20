@@ -179,7 +179,7 @@ async function getNovelContent(page) {
 async function main() {
     const isHeadless = info.headless !== false;
     const extraArgs = isHeadless
-        ? ['--window-position=-32000,-32000', '--window-size=1280,800', '--no-startup-window']
+        ? ['--window-position=-32000,-32000', '--window-size=1280,800']
         : [];
 
     const { browser, page } = await connect({
