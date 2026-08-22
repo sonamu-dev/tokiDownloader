@@ -167,6 +167,85 @@ function isValidNovelContent(text) {
     return koreanMatches !== null && koreanMatches.length >= 50;
 }
 
+function formatRanges(nums) {
+    if (!nums || nums.length === 0) return '없음';
+    const ranges = [];
+    let start = nums[0];
+    let prev = nums[0];
+    for (let k = 1; k < nums.length; k++) {
+        if (nums[k] === prev + 1) {
+            prev = nums[k];
+        } else {
+            ranges.push(start === prev ? `${start}화` : `${start}화 ~ ${prev}화`);
+            start = nums[k];
+            prev = nums[k];
+        }
+    }
+    ranges.push(start === prev ? `${start}화` : `${start}화 ~ ${prev}화`);
+    return ranges.join(', ');
+}
+
+function updateCollectionStatusReport(baseDir, info, totalExpected) {
+    try {
+        const targetDir = `${baseDir}/개별화`;
+        if (!fs.existsSync(targetDir)) return;
+
+        const files = fs.readdirSync(targetDir).filter(f => f.endsWith('.txt'));
+        const validChapterNums = [];
+
+        for (const f of files) {
+            try {
+                const content = fs.readFileSync(`${targetDir}/${f}`, 'utf8');
+                if (isValidNovelContent(content)) {
+                    const match = f.match(/^(\d+)/);
+                    if (match) {
+                        validChapterNums.push(parseInt(match[1], 10));
+                    }
+                }
+            } catch (e) {}
+        }
+
+        validChapterNums.sort((a, b) => a - b);
+        const validSet = new Set(validChapterNums);
+        const maxNum = totalExpected || (validChapterNums.length > 0 ? validChapterNums[validChapterNums.length - 1] : 0);
+        const missingChapterNums = [];
+
+        for (let i = 1; i <= maxNum; i++) {
+            if (!validSet.has(i)) {
+                missingChapterNums.push(i);
+            }
+        }
+
+        const percent = maxNum > 0 ? ((validChapterNums.length / maxNum) * 100).toFixed(1) : '0.0';
+        const nowStr = new Date().toLocaleString('ko-KR');
+
+        const report = `================================================================
+📚 [${info.contentTitle}] 실시간 회차 수집 및 보존 현황판
+================================================================
+- 소설 제목: ${info.contentTitle} (작가: ${info.author || '미상'}, ${info.genre || '일반'})
+- 총 감지 회차: ${maxNum}화
+- 정상 확보 회차: ${validChapterNums.length}화 (${percent}%)
+- 미수집(다운로드 필요): ${missingChapterNums.length}화
+
+----------------------------------------------------------------
+✅ [현재 정상 보존된 회차 목록] (총 ${validChapterNums.length}화)
+----------------------------------------------------------------
+${formatRanges(validChapterNums)}
+
+----------------------------------------------------------------
+📥 [추가 다운로드가 필요한 회차 목록] (총 ${missingChapterNums.length}화)
+----------------------------------------------------------------
+${formatRanges(missingChapterNums)}
+
+================================================================
+* 갱신 일시: ${nowStr}
+* 안내: 정상 회차는 영구 보존되며, 다운로더 실행 시 재요청 없이 100% 캐시 사용됩니다.
+================================================================
+`;
+        saveBook(baseDir, '회차_수집현황.txt', report);
+    } catch (e) {}
+}
+
 async function getNovelContent(page) {
     // 본문(Shadow DOM 또는 레거시 엘리먼트)이 로드될 때까지 최대 15초 대기
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -652,6 +731,7 @@ async function main() {
                 }
 
                 console.log(`💾 개별 회차 파일 안전 보존 완료 (${baseDir}/개별화 - 총 ${finalChaptersToMerge.length}개 파일 보관 중)`);
+                updateCollectionStatusReport(baseDir, info, info.rawTotalCount || maxCh);
             }
         }
     } catch (error) {
