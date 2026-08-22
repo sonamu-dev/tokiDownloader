@@ -110,7 +110,7 @@ function analyseArguments() {
     }
     if (!info.url) {
         consoleGrey('url을 입력하세요');
-        process.exit();
+        process.exit(1);
     }
 
     try {
@@ -131,11 +131,11 @@ function analyseArguments() {
             info.siteTitle = '마나토끼';
         } else {
             consoleGrey('회차 목록 페이지 url을 입력해야합니다. (/novel/, /webtoon/, /comic/ 경로 확인 필요)');
-            process.exit();
+            process.exit(1);
         }
     } catch (error) {
         consoleGrey('유효한 URL 형식이 아닙니다: ' + info.url);
-        process.exit();
+        process.exit(1);
     }
 }
 function saveBook(path, fileName, content) {
@@ -428,14 +428,20 @@ async function main() {
             info.publishStatus = metaInfo.publishStatus;
 
             // 다음 페이지가 없다면 break
-            if (await page.$('ul.pagination li[class="active"] ~ li:not([class="disabled"]) a')) {
-                await Promise.all([
-                    page.waitForNavigation(),
-                    page.locator('ul.pagination li[class="active"] ~ li:not([class="disabled"]) a').click()
-                ]);
-            }
-            else
+            const nextLinkEl = await page.$('ul.pagination li[class="active"] ~ li:not([class="disabled"]) a');
+            if (nextLinkEl) {
+                try {
+                    await Promise.all([
+                        page.waitForNavigation({ timeout: 15000 }).catch(() => {}),
+                        nextLinkEl.click()
+                    ]);
+                    await sleep(1000);
+                } catch (e) {
+                    break;
+                }
+            } else {
                 break;
+            }
         }
         // URL 기준 중복 제거 및 회차 번호 기준 오름차순 정렬
         const uniqueMap = new Map();
@@ -474,12 +480,14 @@ async function main() {
 
         if (link.length === 0) {
             consoleRed(`선택한 범위(${info.startIndex}화 ~ ${info.lastIndex}화)에 해당하는 회차가 없습니다.`);
+            process.exitCode = 1;
             await browser.close();
             return;
         }
         // 페이지 방문하기
         const collectedChapters = [];
-        let folderNameParts = [sanitizeFilename(info.contentTitle)];
+        const safeTitle = sanitizeFilename(info.contentTitle) || '소설';
+        let folderNameParts = [safeTitle];
         if (info.author && info.author !== '미상') {
             folderNameParts.push(sanitizeFilename(info.author));
         }
@@ -813,6 +821,21 @@ async function main() {
                     console.log(`  - 실패 원인: 사이트 일일 조회수 제한(계정/IP 차단 감지)`);
                 }
                 console.log(`  - 안내: 이미 다운로드된 회차는 안전하게 보존되어 있으며, 차단 해제 후 재실행 시 이어서 수집됩니다.`);
+                console.log(`================================================================\n`);
+                process.exitCode = 1;
+            }
+        } else {
+            // 웹툰 / 만화 완료 처리
+            hasIncompleteChapters = failedChapters.length > 0;
+            console.log(`\n================================================================`);
+            if (!hasIncompleteChapters) {
+                console.log(`🎉 [다운로드 완료] 선택하신 모든 웹툰/만화 회차(총 ${link.length}화)가 100% 정상 수집되었습니다!`);
+                console.log(`================================================================\n`);
+                process.exitCode = 0;
+            } else {
+                const failedNums = failedChapters.map(e => e.num);
+                console.log(`❌ [다운로드 미완료] 총 ${link.length}화 중 ${failedChapters.length}개 회차 수집 실패`);
+                console.log(`  - 누락/실패 회차: ${formatRanges(failedNums)}`);
                 console.log(`================================================================\n`);
                 process.exitCode = 1;
             }

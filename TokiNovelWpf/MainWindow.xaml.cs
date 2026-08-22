@@ -798,9 +798,12 @@ namespace TokiNovelWpf
                     item.StatusBg = new SolidColorBrush(Color.FromRgb(168, 85, 247)); // 퍼플
                 }
 
-                if (line.Contains("통합 텍스트 파일 생성 완료:") || line.Contains("EPUB 전자책 생성 완료:"))
+                if (line.Contains("통합 텍스트 파일 저장 완료:") || line.Contains("EPUB 전자책 저장 완료:") ||
+                    line.Contains("통합 텍스트 파일 생성 완료:") || line.Contains("EPUB 전자책 생성 완료:") ||
+                    line.Contains("⚠️ [조회 제한 감지]") || line.Contains("🛑 [다운로드 중단]") ||
+                    line.Contains("❌ [다운로드 미완료]") || line.Contains("🎉 [다운로드 완료]"))
                 {
-                    LblCurrentTask.Text = line;
+                    LblCurrentTask.Text = line.Trim();
                 }
             });
         }
