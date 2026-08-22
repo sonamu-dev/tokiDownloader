@@ -520,92 +520,122 @@ async function main() {
         const lastNum = link.length > 0 ? parseInt(link.at(-1).num) : 1;
         let downloadedCountInSession = 0;
 
-        for (let i = 0; i < link.length; i++) {
-            const safeFileName = sanitizeFilename(link[i].fileName);
-            console.log(`[${i + 1}/${link.length}] ${link[i].num} ${safeFileName} 진행중`);
+        // =============================================================
+        // ⚡ 초고속 사전 캐시 스캔 (Pre-Scan): 루프 시작 전 단 1회 전수 검사
+        // =============================================================
+        const targetDir = `${baseDir}/개별화`;
+        const localCacheMap = new Map();
+
+        if (info.site === "booktoki" && fs.existsSync(targetDir)) {
+            const existingFiles = fs.readdirSync(targetDir);
+            for (const f of existingFiles) {
+                if (!f.endsWith('.txt')) continue;
+                try {
+                    const content = fs.readFileSync(`${targetDir}/${f}`, 'utf8');
+                    if (isValidNovelContent(content)) {
+                        const match = f.match(/^(\d+)/);
+                        if (match) {
+                            const num = parseInt(match[1], 10);
+                            const rawTitle = f.replace(/\.txt$/i, '').replace(/^\d+\s*/, '').trim() || `${num}화`;
+                            localCacheMap.set(num, {
+                                num: num,
+                                title: rawTitle,
+                                content: content.trim(),
+                                filename: f
+                            });
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+
+        // 대상 회차 분할: 이미 있는 회차 vs 새로 다운로드할 회차
+        const cachedChapters = [];
+        const missingLinks = [];
+
+        if (info.site === "booktoki") {
+            for (const ep of link) {
+                const num = parseInt(ep.num, 10);
+                if (localCacheMap.has(num)) {
+                    cachedChapters.push(localCacheMap.get(num));
+                } else {
+                    missingLinks.push(ep);
+                }
+            }
+
+            if (cachedChapters.length > 0) {
+                console.log(`⚡ [사전 캐시 확인] 기존에 정상 저장된 ${cachedChapters.length}개 회차를 감지하여 0.01초 만에 즉시 통과합니다. (미수집 ${missingLinks.length}개 회차로 직행)`);
+            }
+        } else {
+            // 웹툰/만화는 전체 순회
+            missingLinks.push(...link);
+        }
+
+        const loopLinks = (info.site === "booktoki") ? missingLinks : link;
+
+        for (let i = 0; i < loopLinks.length; i++) {
+            const safeFileName = sanitizeFilename(loopLinks[i].fileName);
+            const globalProgressIndex = cachedChapters.length + i + 1;
+            console.log(`[${globalProgressIndex}/${link.length}] ${loopLinks[i].num} ${safeFileName} 진행중`);
 
             // 북토끼 / 뉴토끼 소설
             if (info.site === "booktoki") {
-                const targetDir = `${baseDir}/개별화`;
-                const paddedNum = link[i].num.toString().padStart(4, '0');
+                const paddedNum = loopLinks[i].num.toString().padStart(4, '0');
                 const targetFile = `${paddedNum} ${safeFileName}.txt`;
 
                 let fileContent = '';
-                // 1. 이미 정상 저장된 유효 본문(한글 50자 이상) 파일이 존재하면 웹 요청 없이 즉시 스킵 (스마트 이어받기 및 일일 쿼터 절약)
-                if (fs.existsSync(targetDir)) {
-                    const existingFiles = fs.readdirSync(targetDir);
-                    const matchedFile = existingFiles.find(f => 
-                        f === targetFile || 
-                        f === `${link[i].num} ${safeFileName}.txt` ||
-                        f.startsWith(`${paddedNum} `) ||
-                        f.startsWith(`${link[i].num} `)
-                    );
-                    if (matchedFile) {
-                        try {
-                            const existing = fs.readFileSync(`${targetDir}/${matchedFile}`, 'utf8');
-                            if (isValidNovelContent(existing)) {
-                                console.log(`  ⚡ [스킵] 이미 정상 저장된 회차 로컬 캐시 사용 (${existing.trim().length}자): ${matchedFile}`);
-                                fileContent = existing.trim();
-                            } else {
-                                console.log(`  ⚠️ [손상 감지] 로컬 파일 본문 비어있음(재수집 대상): ${matchedFile}`);
+
+                // 웹 접속 및 최대 3회 재시도
+                for (let retry = 1; retry <= 3; retry++) {
+                    try {
+                        await page.goto(loopLinks[i].src, { waitUntil: 'domcontentloaded' });
+                        fileContent = await getNovelContent(page);
+
+                        // 일일 조회 인증 락 감지 시 120초 자동 쿨다운 대기
+                        if (fileContent === '__RATE_LIMIT_DETECTED__') {
+                            consoleGrey(`  ⚠️ [조회 제한 감지] 사이트 쿨다운을 위해 120초간 대기 후 자동 재시도합니다...`);
+                            for (let sec = 120; sec > 0; sec -= 30) {
+                                console.log(`    ⏳ 락 해제 대기 중: ${sec}초 남음...`);
+                                await sleep(30000);
                             }
-                        } catch (e) {}
+                            fileContent = '';
+                            continue;
+                        }
+
+                        if (fileContent && isValidNovelContent(fileContent)) {
+                            saveBook(targetDir, targetFile, fileContent);
+                            console.log(`  -> ${loopLinks[i].num} ${safeFileName} 저장 완료 (${fileContent.length}자)`);
+                            downloadedCountInSession++;
+                            break;
+                        }
+                    } catch (err) {
+                        consoleGrey(`  -> [재시도 ${retry}/3] 페이지 접속 오류: ${err.message}`);
                     }
+                    if (retry < 3) await sleep(2000);
                 }
 
-                // 2. 파일이 없거나 유효하지 않은 경우 웹 접속 및 최대 3회 재시도
-                if (!fileContent) {
-                    for (let retry = 1; retry <= 3; retry++) {
-                        try {
-                            await page.goto(link[i].src, { waitUntil: 'domcontentloaded' });
-                            fileContent = await getNovelContent(page);
+                if (!fileContent || !isValidNovelContent(fileContent)) {
+                    consoleGrey(`  -> 본문 추출 최종 실패: ${loopLinks[i].num} ${safeFileName}`);
+                }
 
-                            // 일일 조회 인증 락 감지 시 120초 자동 쿨다운 대기
-                            if (fileContent === '__RATE_LIMIT_DETECTED__') {
-                                consoleGrey(`  ⚠️ [조회 제한 감지] 사이트 쿨다운을 위해 120초간 대기 후 자동 재시도합니다...`);
-                                for (let sec = 120; sec > 0; sec -= 30) {
-                                    console.log(`    ⏳ 락 해제 대기 중: ${sec}초 남음...`);
-                                    await sleep(30000);
-                                }
-                                fileContent = '';
-                                continue;
-                            }
-
-                            if (fileContent && isValidNovelContent(fileContent)) {
-                                saveBook(targetDir, targetFile, fileContent);
-                                console.log(`  -> ${link[i].num} ${safeFileName} 저장 완료 (${fileContent.length}자)`);
-                                downloadedCountInSession++;
-                                break;
-                            }
-                        } catch (err) {
-                            consoleGrey(`  -> [재시도 ${retry}/3] 페이지 접속 오류: ${err.message}`);
-                        }
-                        if (retry < 3) await sleep(2000);
+                // ☕ 배치 쿨다운: 150화 연속 다운로드 시 사이트 락 방지를 위해 60초 자동 휴식
+                if (info.safeCooldown && downloadedCountInSession > 0 && downloadedCountInSession % 150 === 0) {
+                    console.log(`\n☕ [안전 쿨다운] ${downloadedCountInSession}화 연속 다운로드 완료! 캡차 락 방지를 위해 60초간 잠시 휴식합니다...`);
+                    for (let sec = 60; sec > 0; sec -= 15) {
+                        console.log(`  ⏳ 쿨다운 진행 중: ${sec}초 남음...`);
+                        await sleep(15000);
                     }
-
-                    if (!fileContent || !isValidNovelContent(fileContent)) {
-                        consoleGrey(`  -> 본문 추출 최종 실패: ${link[i].num} ${safeFileName}`);
-                    }
-
-                    // ☕ 배치 쿨다운: 150화 연속 다운로드 시 사이트 락 방지를 위해 60초 자동 휴식
-                    if (info.safeCooldown && downloadedCountInSession > 0 && downloadedCountInSession % 150 === 0) {
-                        console.log(`\n☕ [안전 쿨다운] ${downloadedCountInSession}화 연속 다운로드 완료! 캡차 락 방지를 위해 60초간 잠시 휴식합니다...`);
-                        for (let sec = 60; sec > 0; sec -= 15) {
-                            console.log(`  ⏳ 쿨다운 진행 중: ${sec}초 남음...`);
-                            await sleep(15000);
-                        }
-                        console.log(`✨ 쿨다운 완료! 다운로드를 계속 진행합니다.\n`);
-                    } else {
-                        // WAF 차단 방지 지터 딜레이 (1.5초 ~ 2.5초)
-                        const jitter = 1500 + Math.random() * 1000;
-                        await sleep(jitter);
-                    }
+                    console.log(`✨ 쿨다운 완료! 다운로드를 계속 진행합니다.\n`);
+                } else {
+                    // WAF 차단 방지 지터 딜레이 (1.5초 ~ 2.5초)
+                    const jitter = 1500 + Math.random() * 1000;
+                    await sleep(jitter);
                 }
 
                 if (fileContent && isValidNovelContent(fileContent)) {
                     collectedChapters.push({
-                        num: link[i].num,
-                        title: link[i].fileName,
+                        num: loopLinks[i].num,
+                        title: loopLinks[i].fileName,
                         content: fileContent
                     });
                 }
@@ -613,8 +643,8 @@ async function main() {
             // 뉴토끼, 마나토끼 (웹툰/만화)
             else {
                 const comicBase = info.outputDir ? info.outputDir : `./${info.siteTitle}/${info.contentTitle}`;
-                const path = `${comicBase}/${link[i].num} ${safeFileName}`;
-                await page.goto(link[i].src, { waitUntil: 'domcontentloaded' });
+                const path = `${comicBase}/${loopLinks[i].num} ${safeFileName}`;
+                await page.goto(loopLinks[i].src, { waitUntil: 'domcontentloaded' });
                 await page.waitForSelector('.view-padding div img', { timeout: 30000 }).catch(() => {});
                 
                 // 이미지 가져오기
@@ -642,7 +672,7 @@ async function main() {
                 let promiseList = [];
                 // 이미지들을 다운로드한다.
                 for (let j = 0; j < imgLists.length; j++) {
-                    const fileName = `${link[i].num} ${safeFileName} image${j.toString().padStart(4, '0')}${imgLists[j].extension}`;
+                    const fileName = `${loopLinks[i].num} ${safeFileName} image${j.toString().padStart(4, '0')}${imgLists[j].extension}`;
                     if (!fs.existsSync(`${path}/${fileName}`))
                         promiseList.push(saveImage(page, path, fileName, `${info.protocolDomain}${imgLists[j].src}`));
                 }
