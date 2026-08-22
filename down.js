@@ -572,6 +572,8 @@ async function main() {
         }
 
         const loopLinks = (info.site === "booktoki") ? missingLinks : link;
+        const failedChapters = [];
+        let rateLimitBlocked = false;
 
         for (let i = 0; i < loopLinks.length; i++) {
             const safeFileName = sanitizeFilename(loopLinks[i].fileName);
@@ -593,13 +595,19 @@ async function main() {
 
                         // 일일 조회 인증 락 감지 시 120초 자동 쿨다운 대기
                         if (fileContent === '__RATE_LIMIT_DETECTED__') {
-                            consoleGrey(`  ⚠️ [조회 제한 감지] 사이트 쿨다운을 위해 120초간 대기 후 자동 재시도합니다...`);
+                            consoleGrey(`  ⚠️ [조회 제한 감지] 사이트 일일 조회 락 감지. 120초간 대기 후 재시도합니다...`);
                             for (let sec = 120; sec > 0; sec -= 30) {
                                 console.log(`    ⏳ 락 해제 대기 중: ${sec}초 남음...`);
                                 await sleep(30000);
                             }
-                            fileContent = '';
-                            continue;
+                            // 쿨다운 후 1회 추가 확인
+                            fileContent = await getNovelContent(page);
+                            if (fileContent === '__RATE_LIMIT_DETECTED__') {
+                                rateLimitBlocked = true;
+                                consoleGrey(`  ❌ [조회 제한 지속] 일일 조회 락이 해제되지 않았습니다. (계정/IP 차단 상태)`);
+                                fileContent = '';
+                                break;
+                            }
                         }
 
                         if (fileContent && isValidNovelContent(fileContent)) {
@@ -614,8 +622,35 @@ async function main() {
                     if (retry < 3) await sleep(2000);
                 }
 
+                // 본문 추출 실패 처리
                 if (!fileContent || !isValidNovelContent(fileContent)) {
-                    consoleGrey(`  -> 본문 추출 최종 실패: ${loopLinks[i].num} ${safeFileName}`);
+                    consoleGrey(`  ❌ 본문 수집 실패: ${loopLinks[i].num} ${safeFileName} ${rateLimitBlocked ? '(사유: 일일 조회 제한 차단)' : ''}`);
+                    failedChapters.push({
+                        num: parseInt(loopLinks[i].num, 10),
+                        title: loopLinks[i].fileName,
+                        reason: rateLimitBlocked ? '사이트 조회수 제한 차단' : '본문 추출 실패'
+                    });
+
+                    // 사이트 차단(락)이 확인된 경우 더 이상 무의미한 반복 요청을 중단하고 즉시 루프 종료
+                    if (rateLimitBlocked) {
+                        console.log(`\n🛑 [다운로드 중단] 사이트 일일 조회수 제한(차단)으로 인해 안전을 위해 다운로드를 중단합니다.`);
+                        console.log(`💡 현재까지 수집된 회차는 안전하게 디스크에 보존되었습니다.\n`);
+                        // 남은 미수집 회차들도 실패 목록에 추가
+                        for (let k = i + 1; k < loopLinks.length; k++) {
+                            failedChapters.push({
+                                num: parseInt(loopLinks[k].num, 10),
+                                title: loopLinks[k].fileName,
+                                reason: '사이트 조회수 제한으로 인한 중단'
+                            });
+                        }
+                        break;
+                    }
+                } else {
+                    collectedChapters.push({
+                        num: loopLinks[i].num,
+                        title: loopLinks[i].fileName,
+                        content: fileContent
+                    });
                 }
 
                 // ☕ 배치 쿨다운: 150화 연속 다운로드 시 사이트 락 방지를 위해 60초 자동 휴식
@@ -630,14 +665,6 @@ async function main() {
                     // WAF 차단 방지 지터 딜레이 (1.5초 ~ 2.5초)
                     const jitter = 1500 + Math.random() * 1000;
                     await sleep(jitter);
-                }
-
-                if (fileContent && isValidNovelContent(fileContent)) {
-                    collectedChapters.push({
-                        num: loopLinks[i].num,
-                        title: loopLinks[i].fileName,
-                        content: fileContent
-                    });
                 }
             }
             // 뉴토끼, 마나토끼 (웹툰/만화)
@@ -682,9 +709,12 @@ async function main() {
         }
 
         // 소설 파일 생성 (TXT 및 EPUB) - 로컬 개별화 폴더의 유효 회차만 누적 병합
+        let hasIncompleteChapters = false;
         if (info.site === "booktoki") {
             const targetDir = `${baseDir}/개별화`;
             let localChapters = [];
+            const localMap = new Map();
+
             if (fs.existsSync(targetDir)) {
                 const allFiles = fs.readdirSync(targetDir);
                 for (const f of allFiles) {
@@ -695,18 +725,23 @@ async function main() {
                         const match = f.match(/^(\d+)/);
                         const num = match ? parseInt(match[1], 10) : 0;
                         const rawTitle = f.replace(/\.txt$/i, '').replace(/^\d+\s*/, '').trim() || `${num}화`;
-                        localChapters.push({
+                        const chObj = {
                             num: num,
                             title: rawTitle,
                             content: content.trim()
-                        });
+                        };
+                        localChapters.push(chObj);
+                        localMap.set(num, chObj);
                     } catch (e) {}
                 }
-                // 회차 번호 오름차순 정렬
                 localChapters.sort((a, b) => a.num - b.num);
             }
 
             const finalChaptersToMerge = localChapters.length > 0 ? localChapters : collectedChapters;
+
+            // 요청된 회차 범위 중 실제로 디스크에 없는 누락 회차 산출
+            const finalMissingEpisodes = link.filter(ep => !localMap.has(parseInt(ep.num, 10)));
+            hasIncompleteChapters = finalMissingEpisodes.length > 0 || failedChapters.length > 0;
 
             if (finalChaptersToMerge.length > 0) {
                 let parts = [sanitizeFilename(info.contentTitle)];
@@ -716,7 +751,7 @@ async function main() {
 
                 const minCh = finalChaptersToMerge[0].num;
                 const maxCh = finalChaptersToMerge[finalChaptersToMerge.length - 1].num;
-                const isAllComplete = (minCh === 1 && maxCh >= (info.rawTotalCount || finalChaptersToMerge.length));
+                const isAllComplete = (minCh === 1 && maxCh >= (info.rawTotalCount || finalChaptersToMerge.length) && finalMissingEpisodes.length === 0);
 
                 let tag = '';
                 if (info.isCompleted && isAllComplete) {
@@ -724,12 +759,12 @@ async function main() {
                 } else if (finalChaptersToMerge.length === (maxCh - minCh + 1)) {
                     tag = `[${minCh}화~${maxCh}화]`;
                 } else {
-                    tag = `[${minCh}화~${maxCh}화 (총 ${finalChaptersToMerge.length}화)]`;
+                    tag = `[${minCh}화~${maxCh}화 (보존 ${finalChaptersToMerge.length}화)]`;
                 }
 
                 // 1. TXT 통합 파일 생성
                 if (info.singleFile) {
-                    console.log(`\n📄 소설 통합 텍스트 파일 생성 중 (총 ${finalChaptersToMerge.length}개 회차 누적 결합)...`);
+                    console.log(`\n📄 소설 통합 텍스트 파일 생성 중 (총 ${finalChaptersToMerge.length}개 회차 결합)...`);
                     let fullBook = '';
                     finalChaptersToMerge.forEach(c => {
                         fullBook += `${c.title}\n\n`;
@@ -738,12 +773,12 @@ async function main() {
 
                     const singleFileName = `${baseFileName} ${tag}.txt`;
                     saveBook(baseDir, singleFileName, fullBook);
-                    console.log(`🎉 통합 텍스트 파일 생성 완료: ${baseDir}/${singleFileName}`);
+                    console.log(`📄 통합 텍스트 파일 저장 완료: ${baseDir}/${singleFileName}`);
                 }
 
                 // 2. EPUB 전자책 파일 생성 (옵션)
                 if (info.makeEpub) {
-                    console.log(`\n📚 소설 EPUB 전자책 생성 중 (총 ${finalChaptersToMerge.length}개 회차 누적 결합)...`);
+                    console.log(`\n📚 소설 EPUB 전자책 생성 중 (총 ${finalChaptersToMerge.length}개 회차 결합)...`);
                     try {
                         const epub = new EpubBuilder();
                         finalChaptersToMerge.forEach(c => {
@@ -754,23 +789,41 @@ async function main() {
                             title: info.contentTitle,
                             author: info.author || '미상'
                         });
-                        console.log(`🎉 EPUB 전자책 생성 완료: ${baseDir}/${epubFileName}`);
+                        console.log(`📚 EPUB 전자책 저장 완료: ${baseDir}/${epubFileName}`);
                     } catch (e) {
                         consoleGrey(`❌ EPUB 생성 실패: ${e.message}`);
                     }
                 }
 
-                console.log(`💾 개별 회차 파일 안전 보존 완료 (${baseDir}/개별화 - 총 ${finalChaptersToMerge.length}개 파일 보관 중)`);
+                console.log(`💾 개별 회차 파일 안전 보존 (${baseDir}/개별화 - 총 ${finalChaptersToMerge.length}개 파일 보관 중)`);
                 updateCollectionStatusReport(baseDir, info, info.rawTotalCount || maxCh);
+            }
+
+            // 최종 완료 / 실패 요약 리포트 출력 및 종료 코드 설정
+            console.log(`\n================================================================`);
+            if (!hasIncompleteChapters) {
+                console.log(`🎉 [다운로드 완료] 선택하신 모든 회차(총 ${link.length}화)가 100% 정상 수집되었습니다!`);
+                console.log(`================================================================\n`);
+                process.exitCode = 0;
+            } else {
+                const missingNums = finalMissingEpisodes.map(e => parseInt(e.num, 10));
+                console.log(`❌ [다운로드 미완료] 총 ${link.length}화 중 ${missingNums.length}개 회차 수집 실패 (${link.length - missingNums.length}화 확보됨)`);
+                console.log(`  - 누락/실패 회차: ${formatRanges(missingNums)}`);
+                if (rateLimitBlocked) {
+                    console.log(`  - 실패 원인: 사이트 일일 조회수 제한(계정/IP 차단 감지)`);
+                }
+                console.log(`  - 안내: 이미 다운로드된 회차는 안전하게 보존되어 있으며, 차단 해제 후 재실행 시 이어서 수집됩니다.`);
+                console.log(`================================================================\n`);
+                process.exitCode = 1;
             }
         }
     } catch (error) {
         console.log(error);
+        process.exitCode = 1;
         await browser.close();
     } finally {
         await browser.close();
     }
-
 }
 
 analyseArguments();

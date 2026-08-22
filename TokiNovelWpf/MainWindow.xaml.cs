@@ -618,6 +618,9 @@ namespace TokiNovelWpf
 
             await Task.Run(async () =>
             {
+                int totalSuccessCount = 0;
+                int totalFailedCount = 0;
+
                 for (int i = 0; i < queueList.Count; i++)
                 {
                     if (abortRequested) break;
@@ -637,6 +640,9 @@ namespace TokiNovelWpf
 
                     bool success = await DownloadSingleNovelAsync(item);
 
+                    if (success) totalSuccessCount++;
+                    else totalFailedCount++;
+
                     Dispatcher.Invoke(() =>
                     {
                         if (success)
@@ -647,7 +653,7 @@ namespace TokiNovelWpf
                         }
                         else
                         {
-                            item.StatusText = abortRequested ? "중단됨" : "실패";
+                            item.StatusText = abortRequested ? "중단됨" : "⚠️ 일부 실패";
                             item.StatusBg = new SolidColorBrush(Color.FromRgb(239, 68, 68)); // 빨강
                         }
                     });
@@ -664,20 +670,41 @@ namespace TokiNovelWpf
                     BtnAddToQueue.IsEnabled = true;
                     TxtUrl.IsEnabled = true;
 
-                    ProgBar.Value = 100;
-                    LblPercent.Text = "100%";
-                    LblProgressText.Text = "모든 대기열 작업 완료!";
-                    LblGlobalStatus.Text = "작업 완료";
-                    LblCurrentTask.Text = "🎉 모든 대기열 소설의 다운로드가 완료되었습니다!";
-                    AppendLog("\n✨ 모든 대기열의 다운로드 작업이 완료되었습니다.");
-
-                    if (autoShutdown && !abortRequested)
+                    if (abortRequested)
                     {
-                        ExecuteSystemShutdown();
+                        LblGlobalStatus.Text = "다운로드 중단됨";
+                        LblCurrentTask.Text = "🛑 사용자에 의해 다운로드가 중단되었습니다.";
+                        AppendLog("\n🛑 다운로드가 사용자에 의해 중단되었습니다.");
+                        MessageBox.Show("다운로드가 중단되었습니다.", "중단", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else if (totalFailedCount > 0)
+                    {
+                        LblGlobalStatus.Text = "다운로드 미완료 (일부 실패)";
+                        LblCurrentTask.Text = $"⚠️ 총 {queueList.Count}개 중 {totalFailedCount}개 소설 수집 실패 (로그 확인 필요)";
+                        AppendLog($"\n⚠️ 총 {queueList.Count}개 중 {totalFailedCount}개 소설에서 다운로드 실패(누락) 회차가 발생했습니다.");
+                        if (autoShutdown)
+                        {
+                            AppendLog("⚠️ 미완료된 소설이 있어 자동 전원 종료(시스템 셧다운)가 안전하게 취소되었습니다.");
+                        }
+                        MessageBox.Show($"일부 회차가 다운로드되지 못했습니다.\n\n- 정상 완료: {totalSuccessCount}개 소설\n- 실패/미완료: {totalFailedCount}개 소설\n\n(주요 사유: 사이트 일일 조회수 제한/차단 또는 네트워크 오류)\n하단 콘솔 로그 및 '회차_수집현황.txt'에서 실패한 회차를 확인해주세요.", "다운로드 미완료 (일부 실패)", MessageBoxButton.OK, MessageBoxImage.Warning);
                     }
                     else
                     {
-                        MessageBox.Show("모든 소설 다운로드가 완료되었습니다!", "완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        ProgBar.Value = 100;
+                        LblPercent.Text = "100%";
+                        LblProgressText.Text = "모든 대기열 작업 완료 (100%)";
+                        LblGlobalStatus.Text = "작업 완료";
+                        LblCurrentTask.Text = "🎉 모든 대기열 소설이 100% 정상 수집되었습니다!";
+                        AppendLog("\n✨ 모든 대기열의 다운로드 작업이 100% 성공적으로 완료되었습니다.");
+
+                        if (autoShutdown)
+                        {
+                            ExecuteSystemShutdown();
+                        }
+                        else
+                        {
+                            MessageBox.Show("모든 소설 다운로드가 100% 정상 완료되었습니다!", "완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                        }
                     }
                 });
             });
