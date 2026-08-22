@@ -438,18 +438,28 @@ async function main() {
             // 북토끼 / 뉴토끼 소설
             if (info.site === "booktoki") {
                 const targetDir = `${baseDir}/개별화`;
-                const targetFile = `${link[i].num} ${safeFileName}.txt`;
+                const paddedNum = link[i].num.toString().padStart(4, '0');
+                const targetFile = `${paddedNum} ${safeFileName}.txt`;
 
                 let fileContent = '';
-                // 1. 이미 정상 저장된 파일(30자 이상)이 존재하면 웹 요청 없이 즉시 스킵 (스마트 이어받기)
-                if (fs.existsSync(`${targetDir}/${targetFile}`)) {
-                    try {
-                        const existing = fs.readFileSync(`${targetDir}/${targetFile}`, 'utf8');
-                        if (existing && existing.trim().length > 30) {
-                            console.log(`  ⚡ [스킵] 이미 다운로드된 회차 로컬 캐시 사용 (${existing.trim().length}자)`);
-                            fileContent = existing.trim();
-                        }
-                    } catch (e) {}
+                // 1. 이미 정상 저장된 파일(30자 이상)이 존재하면 웹 요청 없이 즉시 스킵 (스마트 이어받기 및 일일 쿼터 절약)
+                if (fs.existsSync(targetDir)) {
+                    const existingFiles = fs.readdirSync(targetDir);
+                    const matchedFile = existingFiles.find(f => 
+                        f === targetFile || 
+                        f === `${link[i].num} ${safeFileName}.txt` ||
+                        f.startsWith(`${paddedNum} `) ||
+                        f.startsWith(`${link[i].num} `)
+                    );
+                    if (matchedFile) {
+                        try {
+                            const existing = fs.readFileSync(`${targetDir}/${matchedFile}`, 'utf8');
+                            if (existing && existing.trim().length > 30) {
+                                console.log(`  ⚡ [스킵] 이미 다운로드된 회차 로컬 캐시 사용 (${existing.trim().length}자): ${matchedFile}`);
+                                fileContent = existing.trim();
+                            }
+                        } catch (e) {}
+                    }
                 }
 
                 // 2. 파일이 없거나 유효하지 않은 경우 웹 접속 및 최대 3회 재시도
@@ -550,63 +560,86 @@ async function main() {
             }
         }
 
-        // 소설 파일 생성 (TXT 및 EPUB)
-        if (info.site === "booktoki" && collectedChapters.length > 0) {
-            let parts = [sanitizeFilename(info.contentTitle)];
-            if (info.author) parts.push(sanitizeFilename(info.author));
-            if (info.genre) parts.push(sanitizeFilename(info.genre));
-            const baseFileName = parts.join('-');
-
-            const isAllDownload = (startNum === 1 && lastNum >= (info.rawTotalCount || collectedChapters.length));
-            let tag = '';
-            if (info.isCompleted && isAllDownload) {
-                tag = '[완결]';
-            } else {
-                tag = `[${startNum}화~${lastNum}화]`;
-            }
-
-            // 1. TXT 통합 파일 생성
-            if (info.singleFile) {
-                console.log(`\n📄 소설 통합 텍스트 파일 생성 중...`);
-                let fullBook = '';
-                collectedChapters.forEach(c => {
-                    fullBook += `${c.title}\n\n`;
-                    fullBook += `${c.content}\n\n\n`;
-                });
-
-                const singleFileName = `${baseFileName} ${tag}.txt`;
-                saveBook(baseDir, singleFileName, fullBook);
-                console.log(`🎉 통합 텍스트 파일 생성 완료: ${baseDir}/${singleFileName}`);
-            }
-
-            // 2. EPUB 전자책 파일 생성 (옵션)
-            if (info.makeEpub) {
-                console.log(`\n📚 소설 EPUB 전자책 생성 중...`);
-                try {
-                    const epub = new EpubBuilder();
-                    collectedChapters.forEach(c => {
-                        epub.addChapter(c.title, c.content);
-                    });
-                    const epubFileName = `${baseFileName} ${tag}.epub`;
-                    await epub.saveToFile(`${baseDir}/${epubFileName}`, {
-                        title: info.contentTitle,
-                        author: info.author || '미상'
-                    });
-                    console.log(`🎉 EPUB 전자책 생성 완료: ${baseDir}/${epubFileName}`);
-                } catch (e) {
-                    consoleGrey(`❌ EPUB 생성 실패: ${e.message}`);
-                }
-            }
-
-            // 모든 요청 회차가 정상 수집되었을 때만 개별 임시 파일 정리 (미완료 시 이어받기용 보존)
-            if (collectedChapters.length === link.length) {
-                const targetDir = `${baseDir}/개별화`;
-                if (fs.existsSync(targetDir)) {
+        // 소설 파일 생성 (TXT 및 EPUB) - 로컬 개별화 폴더의 모든 회차를 누적 병합
+        if (info.site === "booktoki") {
+            const targetDir = `${baseDir}/개별화`;
+            let localChapters = [];
+            if (fs.existsSync(targetDir)) {
+                const allFiles = fs.readdirSync(targetDir);
+                for (const f of allFiles) {
+                    if (!f.endsWith('.txt')) continue;
                     try {
-                        fs.rmSync(targetDir, { recursive: true, force: true });
-                        console.log(`🧹 개별 임시 파일 정리 완료`);
+                        const content = fs.readFileSync(`${targetDir}/${f}`, 'utf8');
+                        if (!content || content.trim().length <= 30) continue;
+                        const match = f.match(/^(\d+)/);
+                        const num = match ? parseInt(match[1], 10) : 0;
+                        const rawTitle = f.replace(/\.txt$/i, '').replace(/^\d+\s*/, '').trim() || `${num}화`;
+                        localChapters.push({
+                            num: num,
+                            title: rawTitle,
+                            content: content.trim()
+                        });
                     } catch (e) {}
                 }
+                // 회차 번호 오름차순 정렬
+                localChapters.sort((a, b) => a.num - b.num);
+            }
+
+            const finalChaptersToMerge = localChapters.length > 0 ? localChapters : collectedChapters;
+
+            if (finalChaptersToMerge.length > 0) {
+                let parts = [sanitizeFilename(info.contentTitle)];
+                if (info.author) parts.push(sanitizeFilename(info.author));
+                if (info.genre) parts.push(sanitizeFilename(info.genre));
+                const baseFileName = parts.join('-');
+
+                const minCh = finalChaptersToMerge[0].num;
+                const maxCh = finalChaptersToMerge[finalChaptersToMerge.length - 1].num;
+                const isAllComplete = (minCh === 1 && maxCh >= (info.rawTotalCount || finalChaptersToMerge.length));
+
+                let tag = '';
+                if (info.isCompleted && isAllComplete) {
+                    tag = '[완결]';
+                } else if (finalChaptersToMerge.length === (maxCh - minCh + 1)) {
+                    tag = `[${minCh}화~${maxCh}화]`;
+                } else {
+                    tag = `[${minCh}화~${maxCh}화 (총 ${finalChaptersToMerge.length}화)]`;
+                }
+
+                // 1. TXT 통합 파일 생성
+                if (info.singleFile) {
+                    console.log(`\n📄 소설 통합 텍스트 파일 생성 중 (총 ${finalChaptersToMerge.length}개 회차 누적 결합)...`);
+                    let fullBook = '';
+                    finalChaptersToMerge.forEach(c => {
+                        fullBook += `${c.title}\n\n`;
+                        fullBook += `${c.content}\n\n\n`;
+                    });
+
+                    const singleFileName = `${baseFileName} ${tag}.txt`;
+                    saveBook(baseDir, singleFileName, fullBook);
+                    console.log(`🎉 통합 텍스트 파일 생성 완료: ${baseDir}/${singleFileName}`);
+                }
+
+                // 2. EPUB 전자책 파일 생성 (옵션)
+                if (info.makeEpub) {
+                    console.log(`\n📚 소설 EPUB 전자책 생성 중 (총 ${finalChaptersToMerge.length}개 회차 누적 결합)...`);
+                    try {
+                        const epub = new EpubBuilder();
+                        finalChaptersToMerge.forEach(c => {
+                            epub.addChapter(c.title, c.content);
+                        });
+                        const epubFileName = `${baseFileName} ${tag}.epub`;
+                        await epub.saveToFile(`${baseDir}/${epubFileName}`, {
+                            title: info.contentTitle,
+                            author: info.author || '미상'
+                        });
+                        console.log(`🎉 EPUB 전자책 생성 완료: ${baseDir}/${epubFileName}`);
+                    } catch (e) {
+                        consoleGrey(`❌ EPUB 생성 실패: ${e.message}`);
+                    }
+                }
+
+                console.log(`💾 개별 회차 파일 안전 보존 완료 (${baseDir}/개별화 - 총 ${finalChaptersToMerge.length}개 파일 보관 중)`);
             }
         }
     } catch (error) {
