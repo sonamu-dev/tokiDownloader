@@ -157,6 +157,16 @@ async function saveImage(page, path, fileName, src) {
     fs.writeFileSync(`${path}/${fileName}`, Buffer.from(imageBuffer));
 }
 
+function isValidNovelContent(text) {
+    if (!text || typeof text !== 'string') return false;
+    const trimmed = text.trim();
+    if (trimmed.length < 50) return false;
+    // 0x00 Null 바이트나 순수 공백/특수문자만 있는 빈 껍데기 파일 감지
+    // 한글 문자([\uAC00-\uD7A3])가 최소 50자 이상 포함되어야 유효한 본문으로 인정
+    const koreanMatches = trimmed.match(/[\uAC00-\uD7A3]/g);
+    return koreanMatches !== null && koreanMatches.length >= 50;
+}
+
 async function getNovelContent(page) {
     // 본문(Shadow DOM 또는 레거시 엘리먼트)이 로드될 때까지 최대 15초 대기
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -190,7 +200,7 @@ async function getNovelContent(page) {
             return '__RATE_LIMIT_DETECTED__';
         }
 
-        if (text && text.length > 30) {
+        if (text && isValidNovelContent(text)) {
             return text;
         }
         await sleep(500);
@@ -442,7 +452,7 @@ async function main() {
                 const targetFile = `${paddedNum} ${safeFileName}.txt`;
 
                 let fileContent = '';
-                // 1. 이미 정상 저장된 파일(30자 이상)이 존재하면 웹 요청 없이 즉시 스킵 (스마트 이어받기 및 일일 쿼터 절약)
+                // 1. 이미 정상 저장된 유효 본문(한글 50자 이상) 파일이 존재하면 웹 요청 없이 즉시 스킵 (스마트 이어받기 및 일일 쿼터 절약)
                 if (fs.existsSync(targetDir)) {
                     const existingFiles = fs.readdirSync(targetDir);
                     const matchedFile = existingFiles.find(f => 
@@ -454,9 +464,11 @@ async function main() {
                     if (matchedFile) {
                         try {
                             const existing = fs.readFileSync(`${targetDir}/${matchedFile}`, 'utf8');
-                            if (existing && existing.trim().length > 30) {
-                                console.log(`  ⚡ [스킵] 이미 다운로드된 회차 로컬 캐시 사용 (${existing.trim().length}자): ${matchedFile}`);
+                            if (isValidNovelContent(existing)) {
+                                console.log(`  ⚡ [스킵] 이미 정상 저장된 회차 로컬 캐시 사용 (${existing.trim().length}자): ${matchedFile}`);
                                 fileContent = existing.trim();
+                            } else {
+                                console.log(`  ⚠️ [손상 감지] 로컬 파일 본문 비어있음(재수집 대상): ${matchedFile}`);
                             }
                         } catch (e) {}
                     }
@@ -480,7 +492,7 @@ async function main() {
                                 continue;
                             }
 
-                            if (fileContent && fileContent.length > 30) {
+                            if (fileContent && isValidNovelContent(fileContent)) {
                                 saveBook(targetDir, targetFile, fileContent);
                                 console.log(`  -> ${link[i].num} ${safeFileName} 저장 완료 (${fileContent.length}자)`);
                                 downloadedCountInSession++;
@@ -492,7 +504,7 @@ async function main() {
                         if (retry < 3) await sleep(2000);
                     }
 
-                    if (!fileContent || fileContent.length <= 30) {
+                    if (!fileContent || !isValidNovelContent(fileContent)) {
                         consoleGrey(`  -> 본문 추출 최종 실패: ${link[i].num} ${safeFileName}`);
                     }
 
@@ -511,7 +523,7 @@ async function main() {
                     }
                 }
 
-                if (fileContent && fileContent.length > 30) {
+                if (fileContent && isValidNovelContent(fileContent)) {
                     collectedChapters.push({
                         num: link[i].num,
                         title: link[i].fileName,
@@ -560,7 +572,7 @@ async function main() {
             }
         }
 
-        // 소설 파일 생성 (TXT 및 EPUB) - 로컬 개별화 폴더의 모든 회차를 누적 병합
+        // 소설 파일 생성 (TXT 및 EPUB) - 로컬 개별화 폴더의 유효 회차만 누적 병합
         if (info.site === "booktoki") {
             const targetDir = `${baseDir}/개별화`;
             let localChapters = [];
@@ -570,7 +582,7 @@ async function main() {
                     if (!f.endsWith('.txt')) continue;
                     try {
                         const content = fs.readFileSync(`${targetDir}/${f}`, 'utf8');
-                        if (!content || content.trim().length <= 30) continue;
+                        if (!isValidNovelContent(content)) continue; // 손상/빈 파일은 병합에서 제외
                         const match = f.match(/^(\d+)/);
                         const num = match ? parseInt(match[1], 10) : 0;
                         const rawTitle = f.replace(/\.txt$/i, '').replace(/^\d+\s*/, '').trim() || `${num}화`;
